@@ -1,0 +1,41 @@
+session_name: "dolly-sample"
+working_directory: "/Users/suhailgupta/per/dolly"
+terminal: "bash"  # Options: bash, zsh, fish
+windows:
+  - name: "development"
+    panes:
+      - command: "echo 'Starting development server...' && sleep 2"
+        split: "none"
+        working_directory: "/Users/suhailgupta/per/dolly"
+        pre_hooks:
+          - "echo 'Setting up development environment...'"
+          - "echo 'Loading config...'"
+      - command: "echo 'Running tests in watch mode' && sleep 2"
+        split: "horizontal"
+        pre_hooks:
+          - "echo 'Preparing test environment...'"
+          - "export NODE_ENV=test"
+      - command: "echo 'Starting linter' && sleep 2"
+        split: "vertical"
+        pre_hooks:
+          - "echo 'Configuring linter...'"
+  - name: "monitoring"
+    panes:
+      - command: "echo 'System monitor ready' && sleep 2"
+        split: "none"
+        pre_hooks:
+          - "echo 'Loading system monitor...'"
+      - command: "echo 'Log monitoring active' && sleep 2"
+        split: "horizontal"
+        pre_hooks:
+          - "echo 'Tailing system logs...'"
+  - name: "git"
+    panes:
+      - command: "git status"
+        split: "none"
+        pre_hooks:
+          - "echo 'Git workspace ready'"
+      - command: "echo 'Git log' && git log --oneline -5"
+        split: "horizontal"
+        pre_hooks:
+          - "echo 'Loading git history...'"

@@ -1,0 +1,22 @@
+session_name: "dolly-test"
+working_directory: "/tmp"
+terminal: "bash"
+windows:
+  - name: "test-window-1"
+    panes:
+      - command: "echo 'Test pane 1 main command' > /tmp/dolly-test-pane1.txt && sleep 30"
+        split: "none"
+        pre_hooks:
+          - "echo 'Pre-hook 1 for pane 1' > /tmp/dolly-test-prehook1.txt"
+          - "echo 'Pre-hook 2 for pane 1' > /tmp/dolly-test-prehook2.txt"
+      - command: "echo 'Test pane 2 main command' > /tmp/dolly-test-pane2.txt && sleep 30"
+        split: "horizontal"
+        pre_hooks:
+          - "echo 'Pre-hook for pane 2' > /tmp/dolly-test-pane2-hook.txt"
+  - name: "test-window-2"
+    panes:
+      - command: "echo 'Window 2 pane 1' > /tmp/dolly-test-w2p1.txt && sleep 30"
+        split: "none"
+        working_directory: "/tmp"
+        pre_hooks:
+          - "echo 'Window 2 pre-hook' > /tmp/dolly-test-w2-hook.txt"
