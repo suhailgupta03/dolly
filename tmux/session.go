@@ -3,6 +3,7 @@ package tmux
 import (
 	"fmt"
 	"os/exec"
+	"strings"
 
 	"tmux-manager/config"
 )
@@ -25,10 +26,23 @@ func CreateTmuxSession(cfg *config.TmuxConfig) error {
 		firstPaneWorkingDir = firstWindow.Panes[0].WorkingDirectory
 	}
 
+	// Determine the shell command to use
+	var shellCmd string
+	switch strings.ToLower(cfg.Terminal) {
+	case "zsh":
+		shellCmd = "zsh -l"
+	case "fish":
+		shellCmd = "fish -l"
+	case "bash":
+		shellCmd = "bash -l"
+	default:
+		shellCmd = cfg.Terminal + " -l"
+	}
+
 	if firstPaneWorkingDir != "" {
-		cmd = exec.Command("tmux", "new-session", "-d", "-s", cfg.SessionName, "-n", firstWindow.Name, "-c", firstPaneWorkingDir)
+		cmd = exec.Command("tmux", "new-session", "-d", "-s", cfg.SessionName, "-n", firstWindow.Name, "-c", firstPaneWorkingDir, shellCmd)
 	} else {
-		cmd = exec.Command("tmux", "new-session", "-d", "-s", cfg.SessionName, "-n", firstWindow.Name)
+		cmd = exec.Command("tmux", "new-session", "-d", "-s", cfg.SessionName, "-n", firstWindow.Name, shellCmd)
 	}
 
 	if err := cmd.Run(); err != nil {
@@ -52,9 +66,9 @@ func CreateTmuxSession(cfg *config.TmuxConfig) error {
 		}
 
 		if windowWorkingDir != "" {
-			cmd = exec.Command("tmux", "new-window", "-t", cfg.SessionName, "-n", window.Name, "-c", windowWorkingDir)
+			cmd = exec.Command("tmux", "new-window", "-t", cfg.SessionName, "-n", window.Name, "-c", windowWorkingDir, shellCmd)
 		} else {
-			cmd = exec.Command("tmux", "new-window", "-t", cfg.SessionName, "-n", window.Name)
+			cmd = exec.Command("tmux", "new-window", "-t", cfg.SessionName, "-n", window.Name, shellCmd)
 		}
 
 		if err := cmd.Run(); err != nil {

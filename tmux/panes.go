@@ -34,22 +34,12 @@ func executePreHooks(sessionName, windowName string, paneIndex int, preHooks []s
 	return nil
 }
 
-func executeCommand(sessionName, windowName string, paneIndex int, command, terminal string) error {
+func executeCommand(sessionName, windowName string, paneIndex int, command string) error {
 	if command == "" {
 		return nil
 	}
 
-	// First, switch to the specified terminal if it's not the default
-	if strings.ToLower(terminal) != "bash" {
-		switchCmd := exec.Command("tmux", "send-keys", "-t", fmt.Sprintf("%s:%s.%d", sessionName, windowName, paneIndex), terminal, "Enter")
-		if err := switchCmd.Run(); err != nil {
-			return fmt.Errorf("failed to switch to %s in pane %d: %w", terminal, paneIndex, err)
-		}
-		// Small delay to allow shell to start
-		time.Sleep(200 * time.Millisecond)
-	}
-
-	// Send the command to the shell in the pane
+	// Send the command to the shell in the pane (shell should already be initialized with profile)
 	cmd := exec.Command("tmux", "send-keys", "-t", fmt.Sprintf("%s:%s.%d", sessionName, windowName, paneIndex), command, "Enter")
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("failed to send command to pane %d: %w", paneIndex, err)
@@ -67,7 +57,7 @@ func SetupWindowPanes(sessionName, windowName string, panes []config.Pane, worki
 		return fmt.Errorf("failed to execute pre-hooks for first pane: %w", err)
 	}
 
-	if err := executeCommand(sessionName, windowName, 0, panes[0].Command, terminal); err != nil {
+	if err := executeCommand(sessionName, windowName, 0, panes[0].Command); err != nil {
 		return fmt.Errorf("failed to execute command for first pane: %w", err)
 	}
 
@@ -86,13 +76,26 @@ func SetupWindowPanes(sessionName, windowName string, panes []config.Pane, worki
 			splitFlag = "-v" // default to vertical split
 		}
 
+		// Determine the shell command to use
+		var shellCmd string
+		switch strings.ToLower(terminal) {
+		case "zsh":
+			shellCmd = "zsh -l"
+		case "fish":
+			shellCmd = "fish -l"
+		case "bash":
+			shellCmd = "bash -l"
+		default:
+			shellCmd = terminal + " -l"
+		}
+
 		// Split the pane with per-pane working directory or fallback
 		var cmd *exec.Cmd
 		paneWorkingDir := getPaneWorkingDir(pane, workingDir)
 		if paneWorkingDir != "" {
-			cmd = exec.Command("tmux", "split-window", "-t", fmt.Sprintf("%s:%s", sessionName, windowName), splitFlag, "-c", paneWorkingDir)
+			cmd = exec.Command("tmux", "split-window", "-t", fmt.Sprintf("%s:%s", sessionName, windowName), splitFlag, "-c", paneWorkingDir, shellCmd)
 		} else {
-			cmd = exec.Command("tmux", "split-window", "-t", fmt.Sprintf("%s:%s", sessionName, windowName), splitFlag)
+			cmd = exec.Command("tmux", "split-window", "-t", fmt.Sprintf("%s:%s", sessionName, windowName), splitFlag, shellCmd)
 		}
 
 		if err := cmd.Run(); err != nil {
@@ -105,7 +108,7 @@ func SetupWindowPanes(sessionName, windowName string, panes []config.Pane, worki
 		}
 
 		// Execute command for the new pane
-		if err := executeCommand(sessionName, windowName, paneIndex, pane.Command, terminal); err != nil {
+		if err := executeCommand(sessionName, windowName, paneIndex, pane.Command); err != nil {
 			return fmt.Errorf("failed to execute command for pane %d: %w", paneIndex, err)
 		}
 	}
