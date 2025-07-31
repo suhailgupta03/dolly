@@ -1,8 +1,10 @@
 package config
 
 type Pane struct {
+	ID               string   `yaml:"id,omitempty"`             // Unique identifier for this pane
 	Command          string   `yaml:"command"`
 	Split            string   `yaml:"split"`
+	SplitFrom        string   `yaml:"split_from,omitempty"`     // ID of pane to split from
 	WorkingDirectory string   `yaml:"working_directory,omitempty"`
 	PreHooks         []string `yaml:"pre_hooks,omitempty"`
 }
