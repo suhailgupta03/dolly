@@ -13,7 +13,7 @@ A YAML-based tmux session manager that creates development environments from con
 - Working directory management per session/window/pane
 - Multiple windows and panes with custom layouts
 
-## Installation
+## Installation (Tested on Mac)
 
 ```bash
 git clone https://github.com/suhailgupta03/dolly.git
