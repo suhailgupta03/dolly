@@ -53,6 +53,13 @@ sudo cp dolly /usr/local/bin/
    dolly my-project.yml
    ```
 
+4. Terminate your session:
+   ```bash
+   dolly -terminate my-project.yml
+   # or use the shortcut:
+   dolly -t my-project.yml
+   ```
+
 ## Configuration
 
 ```yaml
@@ -155,6 +162,21 @@ windows:
 **Backward Compatibility:**
 - Configurations without `split_from` work as before (split from previous pane)
 - Configurations without `id` get auto-generated IDs
+
+## Command Line Options
+
+```bash
+dolly [options] <config.yml>
+
+Options:
+  -terminate, -t    Terminate the tmux session
+  -help, -h         Show help information
+
+Examples:
+  dolly my-project.yml     # Create session
+  dolly -t my-project.yml  # Terminate session
+  dolly -h                 # Show help
+```
 
 ## Make Commands
 
