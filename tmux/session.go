@@ -94,3 +94,11 @@ func CreateTmuxSession(cfg *config.TmuxConfig) error {
 
 	return nil
 }
+
+func TerminateTmuxSession(sessionName string) error {
+	cmd := exec.Command("tmux", "kill-session", "-t", sessionName)
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to terminate tmux session '%s': %w", sessionName, err)
+	}
+	return nil
+}
