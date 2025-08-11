@@ -21,13 +21,13 @@ func executePreHooks(sessionName, windowName string, paneIndex int, preHooks []s
 		if hook == "" {
 			continue
 		}
-		
+
 		// Execute pre-hook command
 		cmd := exec.Command("tmux", "send-keys", "-t", fmt.Sprintf("%s:%s.%d", sessionName, windowName, paneIndex), hook, "Enter")
 		if err := cmd.Run(); err != nil {
 			return fmt.Errorf("failed to execute pre-hook '%s': %w", hook, err)
 		}
-		
+
 		// Small delay to allow command to execute
 		time.Sleep(100 * time.Millisecond)
 	}
@@ -55,7 +55,7 @@ func SetupWindowPanes(sessionName, windowName string, panes []config.Pane, worki
 	// Build pane ID to index map and validate configuration
 	paneIDMap := make(map[string]int)
 	paneIndexMap := make(map[int]string) // tmux pane index to pane ID
-	
+
 	// Assign IDs and validate
 	for i, pane := range panes {
 		// Auto-assign ID if not provided
@@ -63,12 +63,12 @@ func SetupWindowPanes(sessionName, windowName string, panes []config.Pane, worki
 		if paneID == "" {
 			paneID = fmt.Sprintf("pane%d", i+1)
 		}
-		
+
 		// Check for duplicate IDs
 		if _, exists := paneIDMap[paneID]; exists {
 			return fmt.Errorf("duplicate pane ID: %s", paneID)
 		}
-		
+
 		paneIDMap[paneID] = i
 		paneIndexMap[i] = paneID
 	}
@@ -91,7 +91,7 @@ func SetupWindowPanes(sessionName, windowName string, panes []config.Pane, worki
 	if firstPaneID == "" {
 		firstPaneID = "pane1"
 	}
-	
+
 	// Execute first pane commands
 	if err := executePreHooks(sessionName, windowName, 0, firstPane.PreHooks, terminal); err != nil {
 		return fmt.Errorf("failed to execute pre-hooks for first pane: %w", err)
@@ -99,7 +99,7 @@ func SetupWindowPanes(sessionName, windowName string, panes []config.Pane, worki
 	if err := executeCommand(sessionName, windowName, 0, firstPane.Command); err != nil {
 		return fmt.Errorf("failed to execute command for first pane: %w", err)
 	}
-	
+
 	// Get the actual tmux pane ID for the first pane
 	firstTmuxPaneID, err := getTmuxPaneID(sessionName, windowName, 0)
 	if err != nil {
@@ -131,7 +131,7 @@ func SetupWindowPanes(sessionName, windowName string, panes []config.Pane, worki
 				return fmt.Errorf("cannot find created pane with ID '%s' to split from", pane.SplitFrom)
 			}
 		} else {
-			// Split from the last created pane (backward compatibility) 
+			// Split from the last created pane (backward compatibility)
 			// For now, let's use the first pane as fallback
 			splitFromTmuxID = firstTmuxPaneID
 		}
@@ -199,22 +199,12 @@ func createSplitPaneWithID(splitFromTmuxID string, pane config.Pane, workingDir,
 	}
 
 	// Determine the shell command to use
-	var shellCmd string
-	switch strings.ToLower(terminal) {
-	case "zsh":
-		shellCmd = "zsh -l"
-	case "fish":
-		shellCmd = "fish -l"
-	case "bash":
-		shellCmd = "bash -l"
-	default:
-		shellCmd = terminal + " -l"
-	}
+	shellCmd := GetShellCommand(terminal)
 
 	// Split from the specified pane using tmux pane ID
 	paneWorkingDir := getPaneWorkingDir(pane, workingDir)
 	var cmd *exec.Cmd
-	
+
 	if paneWorkingDir != "" {
 		cmd = exec.Command("tmux", "split-window", "-t", splitFromTmuxID, splitFlag, "-c", paneWorkingDir, "-P", "-F", "#{pane_id}", shellCmd)
 	} else {
@@ -229,4 +219,3 @@ func createSplitPaneWithID(splitFromTmuxID string, pane config.Pane, workingDir,
 	newPaneID := strings.TrimSpace(string(output))
 	return newPaneID, nil
 }
-

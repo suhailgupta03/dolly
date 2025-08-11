@@ -3,7 +3,6 @@ package tmux
 import (
 	"fmt"
 	"os/exec"
-	"strings"
 
 	"tmux-manager/config"
 )
@@ -27,17 +26,7 @@ func CreateTmuxSession(cfg *config.TmuxConfig) error {
 	}
 
 	// Determine the shell command to use
-	var shellCmd string
-	switch strings.ToLower(cfg.Terminal) {
-	case "zsh":
-		shellCmd = "zsh -l"
-	case "fish":
-		shellCmd = "fish -l"
-	case "bash":
-		shellCmd = "bash -l"
-	default:
-		shellCmd = cfg.Terminal + " -l"
-	}
+	shellCmd := GetShellCommand(cfg.Terminal)
 
 	if firstPaneWorkingDir != "" {
 		cmd = exec.Command("tmux", "new-session", "-d", "-s", cfg.SessionName, "-n", firstWindow.Name, "-c", firstPaneWorkingDir, shellCmd)
@@ -85,8 +74,26 @@ func CreateTmuxSession(cfg *config.TmuxConfig) error {
 		cmd.Run()
 	}
 
-	// Select first window
-	cmd = exec.Command("tmux", "select-window", "-t", fmt.Sprintf("%s:1", cfg.SessionName))
+	// Create streaming window if log streaming is enabled
+	if cfg.LogStream.Enabled {
+		err = CreateStreamingWindow(cfg)
+		if err != nil {
+			return fmt.Errorf("failed to create streaming window: %w", err)
+		}
+
+		// Start log streaming after all windows are created
+		err = StartLogStreaming(cfg)
+		if err != nil {
+			return fmt.Errorf("failed to start log streaming: %w", err)
+		}
+
+		// Select the streaming window (now window 0)
+		cmd = exec.Command("tmux", "select-window", "-t", fmt.Sprintf("%s:0", cfg.SessionName))
+	} else {
+		// Select first window (as before)
+		cmd = exec.Command("tmux", "select-window", "-t", fmt.Sprintf("%s:1", cfg.SessionName))
+	}
+
 	err = cmd.Run()
 	if err != nil {
 		return fmt.Errorf("failed to select first window: %w", err)

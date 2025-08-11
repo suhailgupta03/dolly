@@ -12,6 +12,7 @@ A YAML-based tmux session manager that creates development environments from con
 - Pre-hooks for setup commands
 - Working directory management per session/window/pane
 - Multiple windows and panes with custom layouts
+- **Real-time log streaming** from selected windows and panes
 
 ## Installation (Tested on Mac)
 
@@ -67,6 +68,13 @@ session_name: "my-session"           # Required: Session name
 working_directory: "/path/to/project" # Optional: Default directory
 terminal: "zsh"                      # Optional: Shell (bash/zsh/fish)
 
+# Optional: Log streaming configuration
+log_stream:
+  enabled: true                      # Enable log streaming
+  windows: ["*"]                     # Windows to stream from ("*" for all)
+  panes: ["*"]                       # Panes to stream from ("*" for all)
+  grep: ["ERROR", "WARNING"]         # Filter for specific keywords (optional)
+
 windows:
   - name: "frontend"                 # Window name
     panes:
@@ -118,6 +126,10 @@ Panes are arranged **side by side**
 | `windows[].panes[].split_from` | ID of pane to split from | previous pane |
 | `windows[].panes[].working_directory` | Pane working directory | Inherits from session |
 | `windows[].panes[].pre_hooks` | Commands to run before main command | [] |
+| `log_stream.enabled` | Enable real-time log streaming | false |
+| `log_stream.windows` | Windows to stream from (names or "*" for all) | [] |
+| `log_stream.panes` | Panes to stream from (IDs or "*" for all) | [] |
+| `log_stream.grep` | Keywords to filter log messages (case-insensitive) | [] |
 
 **Split Behavior:**
 - **First pane** in each window must use `split: "none"`
@@ -162,6 +174,83 @@ windows:
 **Backward Compatibility:**
 - Configurations without `split_from` work as before (split from previous pane)
 - Configurations without `id` get auto-generated IDs
+
+## Log Streaming
+
+Dolly supports real-time log streaming that captures output from selected windows and panes into a dedicated streaming window. When enabled, the streaming window becomes the first window (window 0) and continuously displays timestamped output from the specified sources.
+
+### Basic Log Streaming
+
+```yaml
+session_name: "my-project"
+log_stream:
+  enabled: true
+  windows: ["*"]    # Stream from all windows
+  panes: ["*"]      # Stream from all panes
+```
+
+### Selective Streaming
+
+**Stream from specific windows:**
+```yaml
+log_stream:
+  enabled: true
+  windows: ["frontend", "backend"]  # Only these windows
+  panes: ["*"]                      # All panes within selected windows
+```
+
+**Stream from specific panes:**
+```yaml
+log_stream:
+  enabled: true
+  windows: ["*"]                    # All windows
+  panes: ["server", "tests"]        # Only these pane IDs
+```
+
+**Combine window and pane filtering:**
+```yaml
+log_stream:
+  enabled: true
+  windows: ["development"]          # Only from development window
+  panes: ["main-app", "logger"]     # Only these specific panes
+```
+
+**Filter by keywords (grep):**
+```yaml
+log_stream:
+  enabled: true
+  windows: ["*"]                    # All windows
+  panes: ["*"]                      # All panes
+  grep: ["ERROR", "WARNING", "FAIL"] # Only show lines containing these keywords
+```
+
+### How It Works
+
+1. **Streaming Window**: When log streaming is enabled, Dolly creates a "logs" window as the first window (window 0)
+2. **Real-time Capture**: The streaming window continuously monitors the specified panes using `tmux capture-pane`
+3. **Timestamped Output**: Each log entry is prefixed with the pane ID and timestamp
+4. **Incremental Updates**: Only new output since the last check is displayed
+5. **Keyword Filtering**: Optional grep functionality to filter log messages by keywords (case-insensitive)
+6. **Non-intrusive**: Original panes continue to work normally while being monitored
+
+### Example Output
+
+```
+=== Log Streaming Started for Session: my-project ===
+Streaming from 3 panes
+==================================
+
+[%123] 14:30:15:
+[SERVER] Starting development server on port 3000
+[SERVER] Webpack compilation completed
+
+[%124] 14:30:16:
+[TESTS] Running test suite...
+[TESTS] ✓ All tests passed
+
+[%125] 14:30:17:
+[DB] Database connection established
+```
 
 ## Command Line Options
 

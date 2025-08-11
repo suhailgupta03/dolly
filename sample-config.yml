@@ -1,6 +1,20 @@
 session_name: "dolly-sample"
 working_directory: "/Users/suhailgupta/per/dolly"
 terminal: "bash"  # Options: bash, zsh, fish
+
+# Optional: Real-time log streaming configuration
+# When enabled, creates a "logs" window as the first window that streams output from selected panes
+log_stream:
+  enabled: false                    # Set to true to enable log streaming
+  windows: ["*"]                    # Windows to stream from ("*" for all, or ["window1", "window2"])
+  panes: ["*"]                      # Panes to stream from ("*" for all, or ["pane-id1", "pane-id2"])
+  grep: []                          # Keywords to filter logs (e.g., ["ERROR", "WARNING", "INFO"])
+
+# Example streaming configurations:
+# Stream everything:                log_stream: { enabled: true, windows: ["*"], panes: ["*"] }
+# Stream specific windows:          log_stream: { enabled: true, windows: ["development"], panes: ["*"] }
+# Stream specific panes:            log_stream: { enabled: true, windows: ["*"], panes: ["dev-server", "tests"] }
+# Filter by keywords:               log_stream: { enabled: true, windows: ["*"], panes: ["*"], grep: ["ERROR", "WARN"] }
 windows:
   - name: "development"
     panes:
