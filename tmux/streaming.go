@@ -1,13 +1,18 @@
 package tmux
 
 import (
+	_ "embed"
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 	"time"
 
 	"tmux-manager/config"
 )
+
+//go:embed stream_monitor.sh
+var streamMonitorScript string
 
 // StreamingWindow creates a window dedicated to streaming logs from other panes
 func CreateStreamingWindow(cfg *config.TmuxConfig) error {
@@ -134,9 +139,13 @@ func buildStreamingCommand(sessionName string, targetPanes []string, grepKeyword
 		return "echo 'No panes to stream from'"
 	}
 
-	// Get the current working directory to find the script
-	// Use the script relative to where the binary is executed
-	scriptPath := "./tmux/stream_monitor.sh"
+	// Create a temporary script file from the embedded content
+	scriptPath := fmt.Sprintf("/tmp/dolly_stream_monitor_%s.sh", sessionName)
+
+	// Write the embedded script to the temporary file
+	if err := os.WriteFile(scriptPath, []byte(streamMonitorScript), 0755); err != nil {
+		return fmt.Sprintf("echo 'Failed to create streaming script: %v'", err)
+	}
 
 	// Build the command arguments: script_path session_name [grep_keywords...] -- pane1 pane2 ...
 	args := []string{scriptPath, sessionName}
@@ -162,4 +171,14 @@ func contains(slice []string, item string) bool {
 		}
 	}
 	return false
+}
+
+// CleanupStreamingFiles removes temporary streaming script files
+func CleanupStreamingFiles(sessionName string) {
+	scriptPath := fmt.Sprintf("/tmp/dolly_stream_monitor_%s.sh", sessionName)
+	os.Remove(scriptPath)
+
+	// Also cleanup the streaming state directory
+	tempDir := fmt.Sprintf("/tmp/dolly_stream_%s", sessionName)
+	os.RemoveAll(tempDir)
 }

@@ -103,6 +103,9 @@ func CreateTmuxSession(cfg *config.TmuxConfig) error {
 }
 
 func TerminateTmuxSession(sessionName string) error {
+	// Cleanup streaming files before terminating the session
+	CleanupStreamingFiles(sessionName)
+
 	cmd := exec.Command("tmux", "kill-session", "-t", sessionName)
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("failed to terminate tmux session '%s': %w", sessionName, err)
