@@ -7,6 +7,63 @@ import (
 	"tmux-manager/config"
 )
 
+// Default color palette for auto-coloring windows using user-friendly names
+var defaultColorPalette = [15]string{
+	"green",
+	"blue", 
+	"red",
+	"yellow",
+	"cyan",
+	"magenta",
+	"white",
+	"black",
+	"brightgreen",
+	"brightblue",
+	"brightred",
+	"brightyellow",
+	"brightcyan",
+	"brightmagenta",
+	"brightwhite",
+}
+
+// getAutoColor returns a color from the default palette based on window index
+func getAutoColor(windowIndex int) string {
+	return defaultColorPalette[windowIndex%len(defaultColorPalette)]
+}
+
+// shouldUseAutoColor checks if auto-coloring is enabled (default: true)
+func shouldUseAutoColor(cfg *config.TmuxConfig) bool {
+	if cfg.AutoColor == nil {
+		return true // default is enabled
+	}
+	return *cfg.AutoColor
+}
+
+func setWindowColor(sessionName, windowName, color string) error {
+	if color == "" {
+		return nil
+	}
+
+	// Set the window tab background color in the status bar
+	// This colors the "1:development", "2:monitoring" etc tabs at the bottom
+	windowTarget := fmt.Sprintf("%s:%s", sessionName, windowName)
+	
+	// Set window status format with colored background
+	cmd := exec.Command("tmux", "set-window-option", "-t", windowTarget, "window-status-style", fmt.Sprintf("bg=%s,fg=black", color))
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to set window tab color '%s' for window %s: %w", color, windowName, err)
+	}
+
+	// Also set the current window style to make it more visible when selected
+	cmd = exec.Command("tmux", "set-window-option", "-t", windowTarget, "window-status-current-style", fmt.Sprintf("bg=bright%s,fg=black,bold", color))
+	if err := cmd.Run(); err != nil {
+		// If bright version fails, just use regular color
+		exec.Command("tmux", "set-window-option", "-t", windowTarget, "window-status-current-style", fmt.Sprintf("bg=%s,fg=white,bold", color)).Run()
+	}
+	
+	return nil
+}
+
 func CreateTmuxSession(cfg *config.TmuxConfig) error {
 	// Kill existing session if it exists
 	exec.Command("tmux", "kill-session", "-t", cfg.SessionName).Run()
@@ -44,6 +101,17 @@ func CreateTmuxSession(cfg *config.TmuxConfig) error {
 		return fmt.Errorf("failed to setup panes for first window: %w", err)
 	}
 
+	// Apply color to first window
+	globalWindowIndex := 0
+	color := firstWindow.Color
+	if color == "" && shouldUseAutoColor(cfg) {
+		color = getAutoColor(globalWindowIndex)
+	}
+	globalWindowIndex++
+	if err := setWindowColor(cfg.SessionName, firstWindow.Name, color); err != nil {
+		return fmt.Errorf("failed to set color for first window: %w", err)
+	}
+
 	// Create additional windows
 	for i, window := range cfg.Windows[1:] {
 		windowIndex := i + 1
@@ -67,6 +135,16 @@ func CreateTmuxSession(cfg *config.TmuxConfig) error {
 		err = SetupWindowPanes(cfg.SessionName, window.Name, window.Panes, cfg.WorkingDirectory, cfg.Terminal)
 		if err != nil {
 			return fmt.Errorf("failed to setup panes for window '%s': %w", window.Name, err)
+		}
+
+		// Apply color to this window
+		color := window.Color
+		if color == "" && shouldUseAutoColor(cfg) {
+			color = getAutoColor(globalWindowIndex)
+		}
+		globalWindowIndex++
+		if err := setWindowColor(cfg.SessionName, window.Name, color); err != nil {
+			return fmt.Errorf("failed to set color for window '%s': %w", window.Name, err)
 		}
 
 		// Select the first pane in the window

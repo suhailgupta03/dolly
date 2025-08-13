@@ -11,6 +11,7 @@ type Pane struct {
 
 type Window struct {
 	Name  string `yaml:"name"`
+	Color string `yaml:"color,omitempty"` // Background color for the window tab in status bar
 	Panes []Pane `yaml:"panes"`
 }
 
@@ -25,6 +26,7 @@ type TmuxConfig struct {
 	SessionName      string          `yaml:"session_name"`
 	WorkingDirectory string          `yaml:"working_directory,omitempty"`
 	Terminal         string          `yaml:"terminal,omitempty"`
+	AutoColor        *bool           `yaml:"auto_color,omitempty"` // Enable automatic color assignment (default: true)
 	LogStream        LogStreamConfig `yaml:"log_stream,omitempty"`
 	Windows          []Window        `yaml:"windows"`
 }

@@ -1,6 +1,7 @@
 session_name: "dolly-sample"
 working_directory: "/Users/suhailgupta/per/dolly"
 terminal: "bash"  # Options: bash, zsh, fish
+auto_color: true  # Enable automatic color assignment (default: true, set to false to disable)
 
 # Optional: Real-time log streaming configuration
 # When enabled, creates a "logs" window as the first window that streams output from selected panes
@@ -15,8 +16,15 @@ log_stream:
 # Stream specific windows:          log_stream: { enabled: true, windows: ["development"], panes: ["*"] }
 # Stream specific panes:            log_stream: { enabled: true, windows: ["*"], panes: ["dev-server", "tests"] }
 # Filter by keywords:               log_stream: { enabled: true, windows: ["*"], panes: ["*"], grep: ["ERROR", "WARN"] }
+
+# Window tab color coding:
+# You can specify colors for window tabs using the 'color' field at the window level. Supports:
+# - Basic colors: red, green, blue, yellow, cyan, magenta, white, black
+# - Bright colors: brightred, brightgreen, brightblue, brightyellow, brightcyan, brightmagenta, brightwhite
+# - Advanced: colour0-colour255 for 256-color support, hex colors like #ff0000 (if tmux supports)
 windows:
   - name: "development"
+    # color: auto-assigned (first window gets first color from palette: green)
     panes:
       - id: "dev-server"
         command: "echo 'Starting development server...' && sleep 2"
@@ -39,6 +47,7 @@ windows:
         pre_hooks:
           - "echo 'Configuring linter...'"
   - name: "monitoring"
+    color: "brightred"  # explicit color overrides auto-assignment
     panes:
       - id: "system"
         command: "echo 'System monitor ready' && sleep 2"
@@ -52,6 +61,7 @@ windows:
         pre_hooks:
           - "echo 'Tailing system logs...'"
   - name: "git"
+    # color: auto-assigned (third window gets third color from palette: red)
     panes:
       - id: "status"
         command: "git status"
@@ -65,6 +75,7 @@ windows:
         pre_hooks:
           - "echo 'Loading git history...'"
   - name: "complex-layout"
+    color: "yellow"  # explicit color for this window tab
     panes:
       - id: "main"
         command: "echo 'Main workspace' && sleep 60"

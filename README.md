@@ -67,6 +67,7 @@ sudo cp dolly /usr/local/bin/
 session_name: "my-session"           # Required: Session name
 working_directory: "/path/to/project" # Optional: Default directory
 terminal: "zsh"                      # Optional: Shell (bash/zsh/fish)
+auto_color: true                     # Optional: Enable automatic pane coloring (default: true)
 
 # Optional: Log streaming configuration
 log_stream:
@@ -77,6 +78,7 @@ log_stream:
 
 windows:
   - name: "frontend"                 # Window name
+    color: "green"                   # Optional: Window tab color
     panes:
       - command: "npm run dev"       # Command to execute
         split: "none"                # Split type: none/horizontal/vertical
@@ -84,6 +86,43 @@ windows:
         pre_hooks:                   # Optional: Commands run before main command
           - "nvm use 18"
           - "export NODE_ENV=development"
+```
+
+### Window Tab Color Coding
+
+Dolly supports automatic and manual color coding for window tabs to improve visual organization:
+
+**Automatic Coloring (default):**
+- When `auto_color: true` (default), windows without explicit colors are automatically assigned colors
+- To disable auto-coloring: `auto_color: false`
+
+**Manual Coloring:**
+- Set explicit colors using the `color` field in window configuration
+- Explicit colors override automatic assignment
+- Supports multiple color formats:
+  - **Basic colors**: `red`, `green`, `blue`, `yellow`, `cyan`, `magenta`, `white`, `black`
+  - **Bright colors**: `brightred`, `brightgreen`, `brightblue`, `brightyellow`, `brightcyan`, `brightmagenta`, `brightwhite`
+
+
+**Example Configuration:**
+```yaml
+auto_color: true  # Enable automatic coloring (default)
+windows:
+  - name: "development"
+    # No color specified - gets "green" (first window in palette)
+    panes:
+      - id: "server"
+        command: "npm run dev"
+  - name: "testing"
+    color: "brightred"  # Explicit color overrides auto-assignment
+    panes:
+      - id: "tests"
+        command: "npm test"
+  - name: "monitoring"
+    # No color specified - gets "red" (third window in palette)
+    panes:
+      - id: "logs"
+        command: "tail -f app.log"
 ```
 
 ### Split Types
@@ -119,7 +158,9 @@ Panes are arranged **side by side**
 | `session_name` | Name of the tmux session | Required |
 | `working_directory` | Default working directory | Current directory |
 | `terminal` | Shell to use (bash/zsh/fish) | bash |
+| `auto_color` | Enable automatic window coloring | true |
 | `windows[].name` | Window name | Required |
+| `windows[].color` | Window tab color | auto-assigned if `auto_color: true` |
 | `windows[].panes[].id` | Unique identifier for the pane | auto-generated |
 | `windows[].panes[].command` | Command to execute | "" |
 | `windows[].panes[].split` | Split type: `none`, `horizontal`, `vertical` | none |
