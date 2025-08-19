@@ -1,5 +1,7 @@
 # Dolly - Tmux Session Manager
 
+[![CI](https://github.com/suhailgupta03/dolly/workflows/CI/badge.svg)](https://github.com/suhailgupta03/dolly/actions)
+[![Release](https://github.com/suhailgupta03/dolly/workflows/Release/badge.svg)](https://github.com/suhailgupta03/dolly/actions)
 [![Go Version](https://img.shields.io/badge/Go-1.21+-00ADD8?style=flat&logo=go)](https://golang.org/)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
@@ -395,6 +397,34 @@ git clone https://github.com/suhailgupta03/dolly.git
 cd dolly
 make build
 make test
+```
+
+### Cross-Platform Builds
+
+Dolly uses [GoReleaser](https://goreleaser.com/) for automated cross-platform builds and releases:
+
+**Automated Process:**
+- **Build**: Triggers on every push/PR to validate builds
+- **Release**: Creates GitHub releases with binaries on git tag push
+- **Testing**: Separate workflow runs tests and integration tests
+- **Artifacts**: Generates SHA256 checksums and release notes
+
+**Manual Build with GoReleaser:**
+```bash
+# Install GoReleaser (macOS)
+brew install goreleaser
+
+# Build snapshot (all platforms)
+goreleaser build --snapshot --clean
+
+# Release (requires git tag)
+goreleaser release --clean
+```
+
+**Manual Cross-Platform Build:**
+```bash
+# Use GoReleaser config or manual build
+make build  # Uses existing Makefile
 ```
 
 ## License
