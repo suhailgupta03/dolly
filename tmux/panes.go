@@ -9,6 +9,37 @@ import (
 	"tmux-manager/config"
 )
 
+func shouldShowPaneLabels(cfg *config.TmuxConfig) bool {
+	if cfg.ShowPaneLabels == nil {
+		return true // default is enabled
+	}
+	return *cfg.ShowPaneLabels
+}
+
+func shouldShowPaneLabel(pane config.Pane, cfg *config.TmuxConfig) bool {
+	if pane.ShowLabel != nil {
+		return *pane.ShowLabel
+	}
+	return shouldShowPaneLabels(cfg)
+}
+
+func setPaneLabel(sessionName, windowName string, paneIndex int, paneID string) error {
+	if paneID == "" {
+		return nil
+	}
+
+	// Simple approach: just set the pane title to the pane ID
+	target := fmt.Sprintf("%s:%s.%d", sessionName, windowName, paneIndex)
+	cmd := exec.Command("tmux", "select-pane", "-t", target, "-T", paneID)
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to set pane label '%s' for pane %d: %w", paneID, paneIndex, err)
+	}
+	
+	return nil
+}
+
+
+
 func getPaneWorkingDir(pane config.Pane, fallbackDir string) string {
 	if pane.WorkingDirectory != "" {
 		return pane.WorkingDirectory
@@ -47,7 +78,7 @@ func executeCommand(sessionName, windowName string, paneIndex int, command strin
 	return nil
 }
 
-func SetupWindowPanes(sessionName, windowName string, panes []config.Pane, workingDir, terminal string) error {
+func SetupWindowPanes(sessionName, windowName string, panes []config.Pane, workingDir string, cfg *config.TmuxConfig) error {
 	if len(panes) == 0 {
 		return nil
 	}
@@ -93,11 +124,18 @@ func SetupWindowPanes(sessionName, windowName string, panes []config.Pane, worki
 	}
 
 	// Execute first pane commands
-	if err := executePreHooks(sessionName, windowName, 0, firstPane.PreHooks, terminal); err != nil {
+	if err := executePreHooks(sessionName, windowName, 0, firstPane.PreHooks, cfg.Terminal); err != nil {
 		return fmt.Errorf("failed to execute pre-hooks for first pane: %w", err)
 	}
 	if err := executeCommand(sessionName, windowName, 0, firstPane.Command); err != nil {
 		return fmt.Errorf("failed to execute command for first pane: %w", err)
+	}
+
+	// Set pane label for first pane if enabled
+	if shouldShowPaneLabel(firstPane, cfg) {
+		if err := setPaneLabel(sessionName, windowName, 0, firstPaneID); err != nil {
+			return fmt.Errorf("failed to set label for first pane: %w", err)
+		}
 	}
 
 	// Get the actual tmux pane ID for the first pane
@@ -137,7 +175,7 @@ func SetupWindowPanes(sessionName, windowName string, panes []config.Pane, worki
 		}
 
 		// Create the split using tmux pane ID
-		newTmuxPaneID, err := createSplitPaneWithID(splitFromTmuxID, pane, workingDir, terminal)
+		newTmuxPaneID, err := createSplitPaneWithID(splitFromTmuxID, pane, workingDir, cfg.Terminal)
 		if err != nil {
 			return fmt.Errorf("failed to create pane '%s': %w", paneID, err)
 		}
@@ -150,11 +188,18 @@ func SetupWindowPanes(sessionName, windowName string, panes []config.Pane, worki
 			return fmt.Errorf("failed to get index for new pane '%s': %w", paneID, err)
 		}
 
-		if err := executePreHooks(sessionName, windowName, newPaneIndex, pane.PreHooks, terminal); err != nil {
+		if err := executePreHooks(sessionName, windowName, newPaneIndex, pane.PreHooks, cfg.Terminal); err != nil {
 			return fmt.Errorf("failed to execute pre-hooks for pane '%s': %w", paneID, err)
 		}
 		if err := executeCommand(sessionName, windowName, newPaneIndex, pane.Command); err != nil {
 			return fmt.Errorf("failed to execute command for pane '%s': %w", paneID, err)
+		}
+
+		// Set pane label if enabled
+		if shouldShowPaneLabel(pane, cfg) {
+			if err := setPaneLabel(sessionName, windowName, newPaneIndex, paneID); err != nil {
+				return fmt.Errorf("failed to set label for pane '%s': %w", paneID, err)
+			}
 		}
 	}
 

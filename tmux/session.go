@@ -7,6 +7,40 @@ import (
 	"tmux-manager/config"
 )
 
+func shouldShowPaneLabelsGlobal(cfg *config.TmuxConfig) bool {
+	if cfg.ShowPaneLabels == nil {
+		return true // default is enabled
+	}
+	return *cfg.ShowPaneLabels
+}
+
+func getDefaultLabelColor(cfg *config.TmuxConfig) string {
+	if cfg.DefaultLabelColor != "" {
+		return cfg.DefaultLabelColor
+	}
+	return "blue"
+}
+
+func enablePaneBorders(sessionName string, cfg *config.TmuxConfig) error {
+	// Enable pane border status at the top
+	cmd := exec.Command("tmux", "set", "-t", sessionName, "pane-border-status", "top")
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to enable pane border status: %w", err)
+	}
+	
+	// Simple colored format - just background color and the pane title
+	defaultColor := getDefaultLabelColor(cfg)
+	simpleFormat := fmt.Sprintf("#[bg=%s,fg=white,bold] #{pane_title} #[default]", defaultColor)
+	
+	// Set pane border format to show the colored pane title
+	cmd = exec.Command("tmux", "set", "-t", sessionName, "pane-border-format", simpleFormat)
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to set pane border format: %w", err)
+	}
+	
+	return nil
+}
+
 // Default color palette for auto-coloring windows using user-friendly names
 var defaultColorPalette = [15]string{
 	"green",
@@ -95,8 +129,16 @@ func CreateTmuxSession(cfg *config.TmuxConfig) error {
 		return fmt.Errorf("failed to create tmux session: %w", err)
 	}
 
+	// Enable pane borders if labels are enabled globally
+	if shouldShowPaneLabelsGlobal(cfg) {
+		err := enablePaneBorders(cfg.SessionName, cfg)
+		if err != nil {
+			return fmt.Errorf("failed to enable pane borders: %w", err)
+		}
+	}
+
 	// Setup panes for first window
-	err := SetupWindowPanes(cfg.SessionName, firstWindow.Name, firstWindow.Panes, cfg.WorkingDirectory, cfg.Terminal)
+	err := SetupWindowPanes(cfg.SessionName, firstWindow.Name, firstWindow.Panes, cfg.WorkingDirectory, cfg)
 	if err != nil {
 		return fmt.Errorf("failed to setup panes for first window: %w", err)
 	}
@@ -132,7 +174,7 @@ func CreateTmuxSession(cfg *config.TmuxConfig) error {
 			return fmt.Errorf("failed to create window '%s': %w", window.Name, err)
 		}
 
-		err = SetupWindowPanes(cfg.SessionName, window.Name, window.Panes, cfg.WorkingDirectory, cfg.Terminal)
+		err := SetupWindowPanes(cfg.SessionName, window.Name, window.Panes, cfg.WorkingDirectory, cfg)
 		if err != nil {
 			return fmt.Errorf("failed to setup panes for window '%s': %w", window.Name, err)
 		}
@@ -154,7 +196,7 @@ func CreateTmuxSession(cfg *config.TmuxConfig) error {
 
 	// Create streaming window if log streaming is enabled
 	if cfg.LogStream.Enabled {
-		err = CreateStreamingWindow(cfg)
+		err := CreateStreamingWindow(cfg)
 		if err != nil {
 			return fmt.Errorf("failed to create streaming window: %w", err)
 		}
@@ -172,8 +214,7 @@ func CreateTmuxSession(cfg *config.TmuxConfig) error {
 		cmd = exec.Command("tmux", "select-window", "-t", fmt.Sprintf("%s:1", cfg.SessionName))
 	}
 
-	err = cmd.Run()
-	if err != nil {
+	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("failed to select first window: %w", err)
 	}
 

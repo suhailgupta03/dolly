@@ -12,6 +12,7 @@ A YAML-based tmux session manager that creates development environments from con
 - Pre-hooks for setup commands
 - Working directory management per session/window/pane
 - Multiple windows and panes with custom layouts
+- **Colored pane labels** for easy visual identification
 - **Real-time log streaming** from selected windows and panes
 
 ## Installation (Tested on Mac)
@@ -67,7 +68,9 @@ sudo cp dolly /usr/local/bin/
 session_name: "my-session"           # Required: Session name
 working_directory: "/path/to/project" # Optional: Default directory
 terminal: "zsh"                      # Optional: Shell (bash/zsh/fish)
-auto_color: true                     # Optional: Enable automatic pane coloring (default: true)
+auto_color: true                     # Optional: Enable automatic window coloring (default: true)
+show_pane_labels: true               # Optional: Show pane labels (default: true)
+default_label_color: "blue"          # Optional: Default color for pane labels (default: blue)
 
 # Optional: Log streaming configuration
 log_stream:
@@ -80,9 +83,12 @@ windows:
   - name: "frontend"                 # Window name
     color: "green"                   # Optional: Window tab color
     panes:
-      - command: "npm run dev"       # Command to execute
+      - id: "dev-server"             # Optional: Pane identifier (used for labels)
+        command: "npm run dev"       # Command to execute
         split: "none"                # Split type: none/horizontal/vertical
         working_directory: "./web"   # Optional: Pane-specific directory
+        show_label: true             # Optional: Override global label setting
+        label_color: "brightblue"    # Optional: Custom color for this pane label
         pre_hooks:                   # Optional: Commands run before main command
           - "nvm use 18"
           - "export NODE_ENV=development"
@@ -106,23 +112,70 @@ Dolly supports automatic and manual color coding for window tabs to improve visu
 
 **Example Configuration:**
 ```yaml
-auto_color: true  # Enable automatic coloring (default)
+auto_color: true          # Enable automatic window coloring (default)
+show_pane_labels: true    # Enable pane labels (default)
+default_label_color: "blue"  # Default label color
 windows:
   - name: "development"
     # No color specified - gets "green" (first window in palette)
     panes:
-      - id: "server"
+      - id: "server"      # This ID becomes the pane label
         command: "npm run dev"
   - name: "testing"
-    color: "brightred"  # Explicit color overrides auto-assignment
+    color: "brightred"    # Explicit color overrides auto-assignment
     panes:
-      - id: "tests"
+      - id: "tests"       # Label: "tests" with blue background
         command: "npm test"
   - name: "monitoring"
     # No color specified - gets "red" (third window in palette)
     panes:
-      - id: "logs"
+      - id: "logs"        # Label: "logs" with blue background
         command: "tail -f app.log"
+```
+
+### Pane Labels
+
+Dolly supports colored pane labels to help identify panes visually. Labels appear at the top border of each pane with a colored background.
+
+**Features:**
+- Labels are extracted from pane IDs for easy identification
+- Configurable background colors for better visual organization
+- Can be enabled/disabled globally or per-pane
+- Uses high-contrast white text on colored backgrounds
+
+**Global Label Configuration:**
+```yaml
+show_pane_labels: true               # Enable pane labels (default: true)
+default_label_color: "green"         # Default background color (default: blue)
+```
+
+**Per-Pane Label Configuration:**
+```yaml
+windows:
+  - name: "development"
+    panes:
+      - id: "dev-server"             # This becomes the label text
+        command: "npm start"
+        show_label: true             # Override global setting (optional)
+        label_color: "brightblue"    # Custom color for this pane (optional)
+      - id: "tests"
+        command: "npm test"
+        label_color: "yellow"        # Different color for test pane
+```
+
+**Supported Colors:**
+- **Basic**: `red`, `green`, `blue`, `yellow`, `cyan`, `magenta`, `white`, `black`
+- **Bright**: `brightred`, `brightgreen`, `brightblue`, `brightyellow`, `brightcyan`, `brightmagenta`, `brightwhite`
+
+**Visual Result:**
+Each pane displays its ID in a colored label at the top:
+```
+[blue bg] dev-server [end]  [yellow bg] tests [end]
+┌─────────────────┐        ┌─────────────────┐
+│                 │        │                 │
+│ Server output   │        │ Test results    │
+│                 │        │                 │
+└─────────────────┘        └─────────────────┘
 ```
 
 ### Split Types
@@ -159,14 +212,18 @@ Panes are arranged **side by side**
 | `working_directory` | Default working directory | Current directory |
 | `terminal` | Shell to use (bash/zsh/fish) | bash |
 | `auto_color` | Enable automatic window coloring | true |
+| `show_pane_labels` | Show colored pane labels | true |
+| `default_label_color` | Default background color for pane labels | blue |
 | `windows[].name` | Window name | Required |
 | `windows[].color` | Window tab color | auto-assigned if `auto_color: true` |
-| `windows[].panes[].id` | Unique identifier for the pane | auto-generated |
+| `windows[].panes[].id` | Unique identifier for the pane (used for labels) | auto-generated |
 | `windows[].panes[].command` | Command to execute | "" |
 | `windows[].panes[].split` | Split type: `none`, `horizontal`, `vertical` | none |
 | `windows[].panes[].split_from` | ID of pane to split from | previous pane |
 | `windows[].panes[].working_directory` | Pane working directory | Inherits from session |
 | `windows[].panes[].pre_hooks` | Commands to run before main command | [] |
+| `windows[].panes[].show_label` | Override global pane label setting | Inherits from global |
+| `windows[].panes[].label_color` | Background color for this pane's label | Inherits from default |
 | `log_stream.enabled` | Enable real-time log streaming | false |
 | `log_stream.windows` | Windows to stream from (names or "*" for all) | [] |
 | `log_stream.panes` | Panes to stream from (IDs or "*" for all) | [] |
