@@ -1,11 +1,16 @@
 # Dolly - Tmux Session Manager
 
-[![CI](https://github.com/suhailgupta03/dolly/workflows/CI/badge.svg)](https://github.com/suhailgupta03/dolly/actions)
 [![Release](https://github.com/suhailgupta03/dolly/workflows/Release/badge.svg)](https://github.com/suhailgupta03/dolly/actions)
 [![Go Version](https://img.shields.io/badge/Go-1.21+-00ADD8?style=flat&logo=go)](https://golang.org/)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 A YAML-based tmux session manager that creates development environments from configuration files.
+
+## Download
+
+**Pre-built binaries available for all platforms:**
+- 📦 **[Download from Releases](https://github.com/suhailgupta03/dolly/releases)** - Windows, macOS, Linux (recommended)
+- 🔨 **Build from source** - See installation section below
 
 ## Features
 
@@ -17,7 +22,20 @@ A YAML-based tmux session manager that creates development environments from con
 - **Colored pane labels** for easy visual identification
 - **Real-time log streaming** from selected windows and panes
 
-## Installation (Most POSIX systems)
+## Installation
+
+### Option 1: Download Pre-built Binary (Recommended)
+
+1. Go to **[Releases](https://github.com/suhailgupta03/dolly/releases)**
+2. Download the appropriate binary for your system:
+   - **Windows**: `dolly_Windows_x86_64.zip`
+   - **macOS Intel**: `dolly_Darwin_x86_64.tar.gz` 
+   - **macOS Apple Silicon**: `dolly_Darwin_arm64.tar.gz`
+   - **Linux x86_64**: `dolly_Linux_x86_64.tar.gz`
+   - **Linux ARM64**: `dolly_Linux_arm64.tar.gz`
+3. Extract and place in your PATH
+
+### Option 2: Build from Source (POSIX systems)
 
 ```bash
 git clone https://github.com/suhailgupta03/dolly.git
