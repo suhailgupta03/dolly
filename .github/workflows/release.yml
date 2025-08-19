@@ -5,6 +5,11 @@ on:
     tags:
       - 'v*'
   workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release version (e.g., v1.0.0)'
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -23,17 +28,21 @@ jobs:
       with:
         go-version: '1.21'
 
-    - name: Create latest tag for manual release
+    - name: Create/update tag for manual release
       if: github.event_name == 'workflow_dispatch'
       run: |
         git config user.name "GitHub Actions"
         git config user.email "actions@github.com"
-        # Delete existing latest tag if it exists
-        git tag -d latest 2>/dev/null || true
-        git push origin :refs/tags/latest 2>/dev/null || true
-        # Create new latest tag from current main
-        git tag latest
-        git push origin latest
+        TAG="${{ github.event.inputs.tag }}"
+        
+        # Delete existing tag and release if they exist
+        git tag -d $TAG 2>/dev/null || true
+        git push origin :refs/tags/$TAG 2>/dev/null || true
+        
+        # Create new tag from current main
+        git tag $TAG
+        git push origin $TAG
+        echo "Created/updated tag: $TAG"
 
     - name: Run GoReleaser
       uses: goreleaser/goreleaser-action@v5
@@ -42,4 +51,4 @@ jobs:
         version: latest
         args: release --clean
       env:
-        GITHUB_TOKEN: ${{ secrets.TOKEN }}
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

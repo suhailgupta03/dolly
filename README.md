@@ -421,6 +421,10 @@ goreleaser build --snapshot --clean
 goreleaser release --clean
 ```
 
+**Creating Releases:**
+- **Git tag**: `git tag v1.0.0 && git push origin v1.0.0`
+- **Manual**: GitHub Actions → Release workflow → Enter version → Run
+
 **Manual Cross-Platform Build:**
 ```bash
 # Use GoReleaser config or manual build
