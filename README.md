@@ -17,7 +17,7 @@ A YAML-based tmux session manager that creates development environments from con
 - **Colored pane labels** for easy visual identification
 - **Real-time log streaming** from selected windows and panes
 
-## Installation (Tested on Mac)
+## Installation (Most POSIX systems)
 
 ```bash
 git clone https://github.com/suhailgupta03/dolly.git
