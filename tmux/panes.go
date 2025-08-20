@@ -131,8 +131,8 @@ func SetupWindowPanes(sessionName, windowName string, panes []config.Pane, worki
 		return fmt.Errorf("failed to execute command for first pane: %w", err)
 	}
 
-	// Set pane label for first pane if enabled
-	if shouldShowPaneLabel(firstPane, cfg) {
+	// Set pane label for first pane if enabled and ID is explicitly provided
+	if firstPane.ID != "" && shouldShowPaneLabel(firstPane, cfg) {
 		if err := setPaneLabel(sessionName, windowName, 0, firstPaneID); err != nil {
 			return fmt.Errorf("failed to set label for first pane: %w", err)
 		}
@@ -195,8 +195,8 @@ func SetupWindowPanes(sessionName, windowName string, panes []config.Pane, worki
 			return fmt.Errorf("failed to execute command for pane '%s': %w", paneID, err)
 		}
 
-		// Set pane label if enabled
-		if shouldShowPaneLabel(pane, cfg) {
+		// Set pane label if enabled and ID is explicitly provided
+		if pane.ID != "" && shouldShowPaneLabel(pane, cfg) {
 			if err := setPaneLabel(sessionName, windowName, newPaneIndex, paneID); err != nil {
 				return fmt.Errorf("failed to set label for pane '%s': %w", paneID, err)
 			}

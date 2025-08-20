@@ -21,21 +21,23 @@ func getDefaultLabelColor(cfg *config.TmuxConfig) string {
 	return "blue"
 }
 
-func enablePaneBorders(sessionName string, cfg *config.TmuxConfig) error {
-	// Enable pane border status at the top
-	cmd := exec.Command("tmux", "set", "-t", sessionName, "pane-border-status", "top")
+func enablePaneBordersForWindow(sessionName, windowName string, cfg *config.TmuxConfig) error {
+	windowTarget := fmt.Sprintf("%s:%s", sessionName, windowName)
+	
+	// Enable pane border status for this specific window
+	cmd := exec.Command("tmux", "set-window-option", "-t", windowTarget, "pane-border-status", "top")
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("failed to enable pane border status: %w", err)
+		return fmt.Errorf("failed to enable pane border status for window %s: %w", windowName, err)
 	}
 	
 	// Simple colored format - just background color and the pane title
 	defaultColor := getDefaultLabelColor(cfg)
 	simpleFormat := fmt.Sprintf("#[bg=%s,fg=white,bold] #{pane_title} #[default]", defaultColor)
 	
-	// Set pane border format to show the colored pane title
-	cmd = exec.Command("tmux", "set", "-t", sessionName, "pane-border-format", simpleFormat)
+	// Set pane border format for this specific window
+	cmd = exec.Command("tmux", "set-window-option", "-t", windowTarget, "pane-border-format", simpleFormat)
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("failed to set pane border format: %w", err)
+		return fmt.Errorf("failed to set pane border format for window %s: %w", windowName, err)
 	}
 	
 	return nil
@@ -129,18 +131,19 @@ func CreateTmuxSession(cfg *config.TmuxConfig) error {
 		return fmt.Errorf("failed to create tmux session: %w", err)
 	}
 
-	// Enable pane borders if labels are enabled globally
-	if shouldShowPaneLabelsGlobal(cfg) {
-		err := enablePaneBorders(cfg.SessionName, cfg)
-		if err != nil {
-			return fmt.Errorf("failed to enable pane borders: %w", err)
-		}
-	}
 
 	// Setup panes for first window
 	err := SetupWindowPanes(cfg.SessionName, firstWindow.Name, firstWindow.Panes, cfg.WorkingDirectory, cfg)
 	if err != nil {
 		return fmt.Errorf("failed to setup panes for first window: %w", err)
+	}
+
+	// Enable pane borders for first window if labels are enabled
+	if shouldShowPaneLabelsGlobal(cfg) {
+		err := enablePaneBordersForWindow(cfg.SessionName, firstWindow.Name, cfg)
+		if err != nil {
+			return fmt.Errorf("failed to enable pane borders for first window: %w", err)
+		}
 	}
 
 	// Apply color to first window
@@ -177,6 +180,14 @@ func CreateTmuxSession(cfg *config.TmuxConfig) error {
 		err := SetupWindowPanes(cfg.SessionName, window.Name, window.Panes, cfg.WorkingDirectory, cfg)
 		if err != nil {
 			return fmt.Errorf("failed to setup panes for window '%s': %w", window.Name, err)
+		}
+
+		// Enable pane borders for this window if labels are enabled
+		if shouldShowPaneLabelsGlobal(cfg) {
+			err := enablePaneBordersForWindow(cfg.SessionName, window.Name, cfg)
+			if err != nil {
+				return fmt.Errorf("failed to enable pane borders for window '%s': %w", window.Name, err)
+			}
 		}
 
 		// Apply color to this window
