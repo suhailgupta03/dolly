@@ -5,20 +5,6 @@ auto_color: true  # Enable automatic color assignment (default: true, set to fal
 show_pane_labels: true  # Show pane labels extracted from pane IDs (default: true)
 default_label_color: "green"  # Default background color for pane labels (default: blue)
 
-# Optional: Real-time log streaming configuration
-# When enabled, creates a "logs" window as the first window that streams output from selected panes
-log_stream:
-  enabled: false                    # Set to true to enable log streaming
-  windows: ["*"]                    # Windows to stream from ("*" for all, or ["window1", "window2"])
-  panes: ["*"]                      # Panes to stream from ("*" for all, or ["pane-id1", "pane-id2"])
-  grep: []                          # Keywords to filter logs (e.g., ["ERROR", "WARNING", "INFO"])
-
-# Example streaming configurations:
-# Stream everything:                log_stream: { enabled: true, windows: ["*"], panes: ["*"] }
-# Stream specific windows:          log_stream: { enabled: true, windows: ["development"], panes: ["*"] }
-# Stream specific panes:            log_stream: { enabled: true, windows: ["*"], panes: ["dev-server", "tests"] }
-# Filter by keywords:               log_stream: { enabled: true, windows: ["*"], panes: ["*"], grep: ["ERROR", "WARN"] }
-
 # Window tab color coding:
 # You can specify colors for window tabs using the 'color' field at the window level. Supports:
 # - Basic colors: red, green, blue, yellow, cyan, magenta, white, black

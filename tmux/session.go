@@ -23,30 +23,30 @@ func getDefaultLabelColor(cfg *config.TmuxConfig) string {
 
 func enablePaneBordersForWindow(sessionName, windowName string, cfg *config.TmuxConfig) error {
 	windowTarget := fmt.Sprintf("%s:%s", sessionName, windowName)
-	
+
 	// Enable pane border status for this specific window
 	cmd := exec.Command("tmux", "set-window-option", "-t", windowTarget, "pane-border-status", "top")
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("failed to enable pane border status for window %s: %w", windowName, err)
 	}
-	
+
 	// Simple colored format - just background color and the pane title
 	defaultColor := getDefaultLabelColor(cfg)
 	simpleFormat := fmt.Sprintf("#[bg=%s,fg=white,bold] #{pane_title} #[default]", defaultColor)
-	
+
 	// Set pane border format for this specific window
 	cmd = exec.Command("tmux", "set-window-option", "-t", windowTarget, "pane-border-format", simpleFormat)
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("failed to set pane border format for window %s: %w", windowName, err)
 	}
-	
+
 	return nil
 }
 
 // Default color palette for auto-coloring windows using user-friendly names
 var defaultColorPalette = [15]string{
 	"green",
-	"blue", 
+	"blue",
 	"red",
 	"yellow",
 	"cyan",
@@ -83,7 +83,7 @@ func setWindowColor(sessionName, windowName, color string) error {
 	// Set the window tab background color in the status bar
 	// This colors the "1:development", "2:monitoring" etc tabs at the bottom
 	windowTarget := fmt.Sprintf("%s:%s", sessionName, windowName)
-	
+
 	// Set window status format with colored background
 	cmd := exec.Command("tmux", "set-window-option", "-t", windowTarget, "window-status-style", fmt.Sprintf("bg=%s,fg=black", color))
 	if err := cmd.Run(); err != nil {
@@ -96,13 +96,16 @@ func setWindowColor(sessionName, windowName, color string) error {
 		// If bright version fails, just use regular color
 		exec.Command("tmux", "set-window-option", "-t", windowTarget, "window-status-current-style", fmt.Sprintf("bg=%s,fg=white,bold", color)).Run()
 	}
-	
+
 	return nil
 }
 
 func CreateTmuxSession(cfg *config.TmuxConfig) error {
 	// Kill existing session if it exists
 	exec.Command("tmux", "kill-session", "-t", cfg.SessionName).Run()
+
+	// Set base-index to 1 so window numbering starts from 1
+	exec.Command("tmux", "set-option", "-g", "base-index", "1").Run()
 
 	// Create new session with first window
 	if len(cfg.Windows) == 0 {
@@ -130,7 +133,6 @@ func CreateTmuxSession(cfg *config.TmuxConfig) error {
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("failed to create tmux session: %w", err)
 	}
-
 
 	// Setup panes for first window
 	err := SetupWindowPanes(cfg.SessionName, firstWindow.Name, firstWindow.Panes, cfg.WorkingDirectory, cfg)
@@ -205,26 +207,8 @@ func CreateTmuxSession(cfg *config.TmuxConfig) error {
 		cmd.Run()
 	}
 
-	// Create streaming window if log streaming is enabled
-	if cfg.LogStream.Enabled {
-		err := CreateStreamingWindow(cfg)
-		if err != nil {
-			return fmt.Errorf("failed to create streaming window: %w", err)
-		}
-
-		// Start log streaming after all windows are created
-		err = StartLogStreaming(cfg)
-		if err != nil {
-			return fmt.Errorf("failed to start log streaming: %w", err)
-		}
-
-		// Select the streaming window (now window 0)
-		cmd = exec.Command("tmux", "select-window", "-t", fmt.Sprintf("%s:0", cfg.SessionName))
-	} else {
-		// Select first window (as before)
-		cmd = exec.Command("tmux", "select-window", "-t", fmt.Sprintf("%s:1", cfg.SessionName))
-	}
-
+	// Select first window
+	cmd = exec.Command("tmux", "select-window", "-t", fmt.Sprintf("%s:1", cfg.SessionName))
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("failed to select first window: %w", err)
 	}
@@ -233,9 +217,6 @@ func CreateTmuxSession(cfg *config.TmuxConfig) error {
 }
 
 func TerminateTmuxSession(sessionName string) error {
-	// Cleanup streaming files before terminating the session
-	CleanupStreamingFiles(sessionName)
-
 	cmd := exec.Command("tmux", "kill-session", "-t", sessionName)
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("failed to terminate tmux session '%s': %w", sessionName, err)
