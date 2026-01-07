@@ -169,17 +169,20 @@ func CreateTmuxSession(cfg *config.TmuxConfig) error {
 			windowWorkingDir = window.Panes[0].WorkingDirectory
 		}
 
+		// Use session: format to avoid ambiguity when session name matches a window name
+		sessionTarget := cfg.SessionName + ":"
 		if windowWorkingDir != "" {
-			cmd = exec.Command("tmux", "new-window", "-t", cfg.SessionName, "-n", window.Name, "-c", windowWorkingDir, shellCmd)
+			cmd = exec.Command("tmux", "new-window", "-t", sessionTarget, "-n", window.Name, "-c", windowWorkingDir, shellCmd)
 		} else {
-			cmd = exec.Command("tmux", "new-window", "-t", cfg.SessionName, "-n", window.Name, shellCmd)
+			cmd = exec.Command("tmux", "new-window", "-t", sessionTarget, "-n", window.Name, shellCmd)
 		}
 
-		if err := cmd.Run(); err != nil {
-			return fmt.Errorf("failed to create window '%s': %w", window.Name, err)
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			return fmt.Errorf("failed to create window '%s': %w (output: %s)", window.Name, err, string(output))
 		}
 
-		err := SetupWindowPanes(cfg.SessionName, window.Name, window.Panes, cfg.WorkingDirectory, cfg)
+		err = SetupWindowPanes(cfg.SessionName, window.Name, window.Panes, cfg.WorkingDirectory, cfg)
 		if err != nil {
 			return fmt.Errorf("failed to setup panes for window '%s': %w", window.Name, err)
 		}
