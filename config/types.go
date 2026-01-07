@@ -21,6 +21,7 @@ type TmuxConfig struct {
 	SessionName       string   `yaml:"session_name"`
 	WorkingDirectory  string   `yaml:"working_directory,omitempty"`
 	Terminal          string   `yaml:"terminal,omitempty"`
+	RcFile            string   `yaml:"rc_file,omitempty"`             // Path to RC file for shell alias (e.g., ~/.zshrc)
 	AutoColor         *bool    `yaml:"auto_color,omitempty"`          // Enable automatic color assignment (default: true)
 	ShowPaneLabels    *bool    `yaml:"show_pane_labels,omitempty"`    // Show labels on panes (default: true)
 	DefaultLabelColor string   `yaml:"default_label_color,omitempty"` // Default color for pane labels (default: blue)

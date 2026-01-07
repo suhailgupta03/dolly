@@ -2,6 +2,7 @@ package tmux
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
 
 	"tmux-manager/config"
@@ -216,10 +217,35 @@ func CreateTmuxSession(cfg *config.TmuxConfig) error {
 		return fmt.Errorf("failed to select first window: %w", err)
 	}
 
+	// Add shell alias if RC file is configured
+	if cfg.RcFile != "" {
+		aliasName, err := AddShellAlias(cfg.RcFile, cfg.SessionName)
+		if err != nil {
+			// Don't fail session creation, just warn
+			fmt.Fprintf(os.Stderr, "Warning: Failed to add shell alias: %v\n", err)
+		} else {
+			if aliasName != cfg.SessionName {
+				fmt.Printf("Note: Created alias '%s' (conflict with existing '%s')\n", aliasName, cfg.SessionName)
+			}
+			fmt.Printf("Shell alias '%s' added to %s\n", aliasName, cfg.RcFile)
+			fmt.Printf("Run 'source %s' or restart your shell to use it\n", cfg.RcFile)
+		}
+	}
+
 	return nil
 }
 
-func TerminateTmuxSession(sessionName string) error {
+func TerminateTmuxSession(sessionName string, rcFile string) error {
+	// Remove shell alias if RC file is configured
+	if rcFile != "" {
+		if err := RemoveShellAlias(rcFile, sessionName); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: Failed to remove shell alias: %v\n", err)
+		} else {
+			fmt.Printf("Shell alias removed from %s\n", rcFile)
+			fmt.Printf("Run 'source %s' or restart your shell to refresh\n", rcFile)
+		}
+	}
+
 	cmd := exec.Command("tmux", "kill-session", "-t", sessionName)
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("failed to terminate tmux session '%s': %w", sessionName, err)

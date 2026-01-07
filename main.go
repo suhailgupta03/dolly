@@ -46,7 +46,7 @@ func main() {
 	}
 
 	if *terminate || *terminateShort {
-		err = tmux.TerminateTmuxSession(cfg.SessionName)
+		err = tmux.TerminateTmuxSession(cfg.SessionName, cfg.RcFile)
 		if err != nil {
 			log.Fatalf("Error terminating tmux session: %v", err)
 		}
