@@ -28,6 +28,9 @@ func main() {
 		case "sessions":
 			handleSessions(os.Args[2:])
 			return
+		case "attach":
+			handleAttach(os.Args[2:])
+			return
 		}
 	}
 
@@ -52,12 +55,15 @@ func main() {
 		fmt.Fprintf(os.Stderr, "\nSubcommands:\n")
 		fmt.Fprintf(os.Stderr, "  throwaway [flags]        Create/manage disposable sessions\n")
 		fmt.Fprintf(os.Stderr, "  sessions  [flags]        List all registered dolly sessions\n")
+		fmt.Fprintf(os.Stderr, "  attach    [SESSION|-all|-list]   Adopt existing tmux sessions\n")
 		fmt.Fprintf(os.Stderr, "\nExamples:\n")
 		fmt.Fprintf(os.Stderr, "  %s my-project.yml                           # Create session from YAML\n", os.Args[0])
 		fmt.Fprintf(os.Stderr, "  %s -t my-project.yml                        # Terminate session\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "  %s -t my-session                            # Terminate by name (no YAML needed)\n", os.Args[0])
 		fmt.Fprintf(os.Stderr, "  %s -e \"npm run dev, npm test\" -n myproject  # Quick session\n", os.Args[0])
 		fmt.Fprintf(os.Stderr, "  %s throwaway                                # Instant throwaway session\n", os.Args[0])
 		fmt.Fprintf(os.Stderr, "  %s sessions                                 # List all sessions\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "  %s attach -list                             # Discover unmanaged sessions\n", os.Args[0])
 		fmt.Fprintf(os.Stderr, "  %s -h                                       # Show help\n", os.Args[0])
 	}
 
@@ -91,8 +97,19 @@ func main() {
 		os.Exit(1)
 	}
 
-	configFile := flag.Arg(0)
-	cfg, err := config.LoadConfig(configFile)
+	arg := flag.Arg(0)
+
+	// If -t is set and the argument is not an existing file, treat it as a
+	// bare session name so that attached/throwaway/exec sessions can be
+	// terminated without a YAML config file.
+	if *terminate || *terminateShort {
+		if _, err := os.Stat(arg); os.IsNotExist(err) {
+			handleTerminateByName(arg)
+			return
+		}
+	}
+
+	cfg, err := config.LoadConfig(arg)
 	if err != nil {
 		log.Fatalf("Error loading config: %v", err)
 	}
@@ -103,7 +120,6 @@ func main() {
 			log.Fatalf("Error terminating tmux session: %v", err)
 		}
 		fmt.Printf("Tmux session '%s' terminated successfully!\n", cfg.SessionName)
-		// Remove from registry; not fatal if absent
 		if rerr := registry.RemoveEntry(cfg.SessionName); rerr != nil {
 			log.Printf("Note: session '%s' was not in the registry", cfg.SessionName)
 		}
@@ -117,8 +133,7 @@ func main() {
 
 	fmt.Printf("Tmux session '%s' created successfully with terminal '%s'!\n", cfg.SessionName, cfg.Terminal)
 
-	// Register the session
-	absPath, _ := filepath.Abs(configFile)
+	absPath, _ := filepath.Abs(arg)
 	if rerr := registry.AddEntry(registry.Entry{
 		Name:       cfg.SessionName,
 		Type:       registry.TypeYAML,
@@ -130,6 +145,19 @@ func main() {
 		Terminal:   cfg.Terminal,
 	}); rerr != nil {
 		log.Printf("Warning: could not register session in registry: %v", rerr)
+	}
+}
+
+// handleTerminateByName terminates a tmux session by bare name (no YAML needed).
+// Used when -t is given a name that is not an existing file path.
+func handleTerminateByName(name string) {
+	if err := tmux.TerminateTmuxSession(name, ""); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: could not terminate tmux session '%s': %v\n", name, err)
+	} else {
+		fmt.Printf("Tmux session '%s' terminated successfully!\n", name)
+	}
+	if rerr := registry.RemoveEntry(name); rerr != nil {
+		log.Printf("Note: session '%s' was not in the registry", name)
 	}
 }
 
@@ -173,7 +201,6 @@ func handleExecMode(execStr, sessionName string, terminate bool) {
 
 	fmt.Printf("Tmux session '%s' created successfully!\n", cfg.SessionName)
 
-	// Register the exec session
 	if rerr := registry.AddEntry(registry.Entry{
 		Name:       cfg.SessionName,
 		Type:       registry.TypeExec,
@@ -290,16 +317,12 @@ func handleThrowawayList() {
 }
 
 func handleThrowawayKill(name string) {
-	// Kill the tmux session (warn if already dead, but continue to clean registry)
 	if err := tmux.TerminateTmuxSession(name, ""); err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: could not terminate tmux session '%s': %v\n", name, err)
 	}
-
-	// Remove from registry
 	if err := registry.RemoveEntry(name); err != nil {
 		log.Fatalf("Error removing '%s' from registry: %v", name, err)
 	}
-
 	fmt.Printf("Session '%s' terminated and removed from registry.\n", name)
 }
 
@@ -319,19 +342,215 @@ func handleThrowawayCleanup(days int) {
 		len(removed), plural(len(removed), "entry", "entries"), days)
 }
 
+// ── attach subcommand ─────────────────────────────────────────────────────────
+
+func handleAttach(args []string) {
+	fs := flag.NewFlagSet("attach", flag.ExitOnError)
+
+	all := fs.Bool("all", false, "Attach all unmanaged running tmux sessions")
+	list := fs.Bool("list", false, "List unmanaged tmux sessions (not yet in dolly registry)")
+
+	fs.Usage = func() {
+		fmt.Fprintf(os.Stderr, "Usage: dolly attach [SESSION | -all | -list]\n\n")
+		fmt.Fprintf(os.Stderr, "Flags:\n")
+		fs.PrintDefaults()
+		fmt.Fprintf(os.Stderr, "\nExamples:\n")
+		fmt.Fprintf(os.Stderr, "  dolly attach work         # adopt session named 'work'\n")
+		fmt.Fprintf(os.Stderr, "  dolly attach -all         # adopt all unmanaged sessions\n")
+		fmt.Fprintf(os.Stderr, "  dolly attach -list        # discover unmanaged sessions\n")
+	}
+
+	if err := fs.Parse(args); err != nil {
+		os.Exit(1)
+	}
+
+	switch {
+	case *list:
+		handleAttachList()
+	case *all:
+		handleAttachAll()
+	case fs.NArg() >= 1:
+		handleAttachDirect(fs.Arg(0))
+	default:
+		fs.Usage()
+		os.Exit(1)
+	}
+}
+
+// handleAttachOne registers a single tmux session in the dolly registry.
+// Returns (alreadyRegistered, error). The caller decides how to surface the
+// alreadyRegistered flag to the user.
+func handleAttachOne(name string) (alreadyRegistered bool, err error) {
+	// Verify the session is actually running
+	if !tmux.IsSessionAlive(name) {
+		return false, fmt.Errorf("no tmux session named %q is currently running", name)
+	}
+
+	// Check for existing registry entry
+	reg, err := registry.Load()
+	if err != nil {
+		return false, fmt.Errorf("could not load registry: %w", err)
+	}
+	for _, s := range reg.Sessions {
+		if s.Name == name {
+			alreadyRegistered = true
+			break
+		}
+	}
+
+	// Query tmux for current session metadata
+	windows, workingDir, detailErr := tmux.GetSessionDetails(name)
+	if detailErr != nil {
+		log.Printf("Warning: could not read session details for '%s': %v", name, detailErr)
+	}
+
+	now := time.Now()
+	if aerr := registry.AddEntry(registry.Entry{
+		Name:       name,
+		Type:       registry.TypeAttached,
+		CreatedAt:  now,
+		LastActive: now,
+		WorkingDir: workingDir,
+		Windows:    windows,
+		Terminal:   tmux.DetectShell(),
+	}); aerr != nil {
+		return alreadyRegistered, fmt.Errorf("could not update registry: %w", aerr)
+	}
+
+	return alreadyRegistered, nil
+}
+
+func handleAttachDirect(name string) {
+	// Load registry first so we can show the previous type if already registered
+	reg, _ := registry.Load()
+	var prevType registry.SessionType
+	for _, s := range reg.Sessions {
+		if s.Name == name {
+			prevType = s.Type
+			break
+		}
+	}
+
+	already, err := handleAttachOne(name)
+	if err != nil {
+		log.Fatalf("Error: %v", err)
+	}
+	if already {
+		fmt.Printf("Warning: session '%s' was already registered (type: %s). Updating with current info.\n",
+			name, strings.ToUpper(string(prevType)))
+	}
+
+	// Read back the saved entry to report accurate details
+	reg2, _ := registry.Load()
+	windows, workingDir := 0, ""
+	for _, s := range reg2.Sessions {
+		if s.Name == name {
+			windows = s.Windows
+			workingDir = s.WorkingDir
+			break
+		}
+	}
+	fmt.Printf("Session '%s' attached to dolly (%d windows, %s)\n", name, windows, workingDir)
+}
+
+func handleAttachAll() {
+	sessions, err := tmux.ListSessions()
+	if err != nil {
+		log.Fatalf("Error listing tmux sessions: %v", err)
+	}
+	if len(sessions) == 0 {
+		fmt.Println("No tmux sessions are currently running.")
+		return
+	}
+
+	attached, skipped := 0, 0
+	for _, name := range sessions {
+		already, err := handleAttachOne(name)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "  error attaching '%s': %v\n", name, err)
+			continue
+		}
+		if already {
+			skipped++
+			fmt.Printf("  skipped '%s' (already managed)\n", name)
+		} else {
+			attached++
+			fmt.Printf("  attached '%s'\n", name)
+		}
+	}
+
+	switch {
+	case attached == 0 && skipped > 0:
+		fmt.Println("All running tmux sessions are already managed by dolly.")
+	case attached > 0 && skipped > 0:
+		fmt.Printf("Attached %d %s. Skipped %d already-managed %s.\n",
+			attached, plural(attached, "session", "sessions"),
+			skipped, plural(skipped, "session", "sessions"))
+	default:
+		fmt.Printf("Attached %d %s.\n", attached, plural(attached, "session", "sessions"))
+	}
+}
+
+func handleAttachList() {
+	sessions, err := tmux.ListSessions()
+	if err != nil {
+		log.Fatalf("Error listing tmux sessions: %v", err)
+	}
+	if len(sessions) == 0 {
+		fmt.Println("No tmux sessions running.")
+		return
+	}
+
+	reg, err := registry.Load()
+	if err != nil {
+		log.Fatalf("Error loading registry: %v", err)
+	}
+	managed := make(map[string]bool, len(reg.Sessions))
+	for _, s := range reg.Sessions {
+		managed[s.Name] = true
+	}
+
+	var unmanaged []string
+	for _, name := range sessions {
+		if !managed[name] {
+			unmanaged = append(unmanaged, name)
+		}
+	}
+
+	if len(unmanaged) == 0 {
+		fmt.Println("All running tmux sessions are already managed by dolly.")
+		return
+	}
+
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	fmt.Println("Unmanaged tmux sessions (not in dolly registry):")
+	fmt.Fprintln(w, "NAME\tWINDOWS\tDIR")
+	for _, name := range unmanaged {
+		wins, dir, detailErr := tmux.GetSessionDetails(name)
+		if detailErr != nil {
+			wins, dir = 0, "-"
+		}
+		fmt.Fprintf(w, "%s\t%d\t%s\n", name, wins, dir)
+	}
+	w.Flush()
+	fmt.Println()
+	fmt.Println(`Run "dolly attach -all" to attach all, or "dolly attach NAME" for one.`)
+}
+
 // ── sessions subcommand ───────────────────────────────────────────────────────
 
 func handleSessions(args []string) {
 	fs := flag.NewFlagSet("sessions", flag.ExitOnError)
-	typeStr := fs.String("type", "", "Filter by type: throwaway, yaml, exec")
+	typeStr := fs.String("type", "", "Filter by type: throwaway, yaml, exec, attached")
 
 	fs.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Usage: dolly sessions [flags]\n\n")
 		fmt.Fprintf(os.Stderr, "Flags:\n")
 		fs.PrintDefaults()
 		fmt.Fprintf(os.Stderr, "\nExamples:\n")
-		fmt.Fprintf(os.Stderr, "  dolly sessions                # all registered sessions\n")
-		fmt.Fprintf(os.Stderr, "  dolly sessions -type yaml     # only YAML sessions\n")
+		fmt.Fprintf(os.Stderr, "  dolly sessions                    # all registered sessions\n")
+		fmt.Fprintf(os.Stderr, "  dolly sessions -type yaml         # only YAML sessions\n")
+		fmt.Fprintf(os.Stderr, "  dolly sessions -type attached     # only attached sessions\n")
 	}
 
 	if err := fs.Parse(args); err != nil {

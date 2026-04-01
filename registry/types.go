@@ -11,6 +11,7 @@ const (
 	TypeThrowaway SessionType = "throwaway"
 	TypeYAML      SessionType = "yaml"
 	TypeExec      SessionType = "exec"
+	TypeAttached  SessionType = "attached"
 )
 
 // Entry represents one registered dolly session

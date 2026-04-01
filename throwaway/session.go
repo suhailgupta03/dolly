@@ -3,7 +3,6 @@ package throwaway
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"regexp"
 	"time"
 
@@ -18,18 +17,6 @@ var validName = regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
 // Format: tw-MMDD-HHMMSS (e.g. tw-0401-143022)
 func GenerateName() string {
 	return "tw-" + time.Now().Format("0102-150405")
-}
-
-// DetectShell returns the user's shell (zsh/fish/bash) from $SHELL, falling
-// back to "bash" when the variable is unset or unrecognised.
-func DetectShell() string {
-	shell := filepath.Base(os.Getenv("SHELL"))
-	switch shell {
-	case "zsh", "fish", "bash":
-		return shell
-	default:
-		return "bash"
-	}
 }
 
 // BuildThrowawayConfig constructs a TmuxConfig for a throwaway session.
@@ -75,7 +62,7 @@ func BuildThrowawayConfig(name, workingDir string, numWindows, panesPerWindow in
 	return &config.TmuxConfig{
 		SessionName:      name,
 		WorkingDirectory: workingDir,
-		Terminal:         DetectShell(),
+		Terminal:         tmux.DetectShell(),
 		Windows:          windows,
 	}, nil
 }

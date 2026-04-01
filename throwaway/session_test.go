@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"regexp"
 	"testing"
+
+	"tmux-manager/tmux"
 )
 
 var namePattern = regexp.MustCompile(`^tw-\d{4}-\d{6}$`)
@@ -29,21 +31,21 @@ func TestGenerateName_Unique(t *testing.T) {
 func TestDetectShell_Fallback(t *testing.T) {
 	// With no $SHELL set, should fall back to "bash"
 	t.Setenv("SHELL", "")
-	if got := DetectShell(); got != "bash" {
+	if got := tmux.DetectShell(); got != "bash" {
 		t.Fatalf("DetectShell() = %q, want 'bash'", got)
 	}
 }
 
 func TestDetectShell_Zsh(t *testing.T) {
 	t.Setenv("SHELL", "/bin/zsh")
-	if got := DetectShell(); got != "zsh" {
+	if got := tmux.DetectShell(); got != "zsh" {
 		t.Fatalf("DetectShell() = %q, want 'zsh'", got)
 	}
 }
 
 func TestDetectShell_Fish(t *testing.T) {
 	t.Setenv("SHELL", "/usr/local/bin/fish")
-	if got := DetectShell(); got != "fish" {
+	if got := tmux.DetectShell(); got != "fish" {
 		t.Fatalf("DetectShell() = %q, want 'fish'", got)
 	}
 }

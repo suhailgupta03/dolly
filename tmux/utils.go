@@ -1,6 +1,22 @@
 package tmux
 
-import "strings"
+import (
+	"os"
+	"path/filepath"
+	"strings"
+)
+
+// DetectShell returns the user's current shell (zsh/fish/bash) from $SHELL,
+// falling back to "bash" when the variable is unset or unrecognised.
+func DetectShell() string {
+	shell := filepath.Base(os.Getenv("SHELL"))
+	switch shell {
+	case "zsh", "fish", "bash":
+		return shell
+	default:
+		return "bash"
+	}
+}
 
 // GetShellCommand returns the appropriate shell command based on terminal type
 func GetShellCommand(terminal string) string {

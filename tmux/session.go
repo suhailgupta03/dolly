@@ -1,12 +1,71 @@
 package tmux
 
 import (
+	"bytes"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
+	"strconv"
+	"strings"
 
 	"tmux-manager/config"
 )
+
+// IsSessionAlive reports whether a tmux session with the given name is running.
+func IsSessionAlive(name string) bool {
+	cmd := exec.Command("tmux", "has-session", "-t", name)
+	cmd.Stdout = io.Discard
+	cmd.Stderr = io.Discard
+	return cmd.Run() == nil
+}
+
+// ListSessions returns the names of all running tmux sessions.
+// Returns nil, nil (not an error) when no tmux server is running.
+func ListSessions() ([]string, error) {
+	cmd := exec.Command("tmux", "list-sessions", "-F", "#{session_name}")
+	cmd.Stderr = io.Discard
+	out, err := cmd.Output()
+	if err != nil {
+		// Non-zero exit typically means no server is running — treat as empty list
+		return nil, nil
+	}
+	var names []string
+	for _, line := range strings.Split(string(bytes.TrimSpace(out)), "\n") {
+		if name := strings.TrimSpace(line); name != "" {
+			names = append(names, name)
+		}
+	}
+	return names, nil
+}
+
+// GetSessionDetails queries tmux for the window count and active pane's working
+// directory for the named session. On failure it returns zero values and an
+// error — callers should warn and continue rather than abort.
+func GetSessionDetails(name string) (windows int, workingDir string, err error) {
+	runQuery := func(format string) (string, error) {
+		cmd := exec.Command("tmux", "display-message", "-t", name, "-p", format)
+		cmd.Stderr = io.Discard
+		out, e := cmd.Output()
+		return strings.TrimSpace(string(out)), e
+	}
+
+	winStr, err := runQuery("#{session_windows}")
+	if err != nil {
+		return 0, "", fmt.Errorf("could not query session windows for %q: %w", name, err)
+	}
+	windows, err = strconv.Atoi(winStr)
+	if err != nil {
+		return 0, "", fmt.Errorf("unexpected window count %q for session %q", winStr, name)
+	}
+
+	workingDir, err = runQuery("#{pane_current_path}")
+	if err != nil {
+		return windows, "", fmt.Errorf("could not query working dir for %q: %w", name, err)
+	}
+
+	return windows, workingDir, nil
+}
 
 func shouldShowPaneLabelsGlobal(cfg *config.TmuxConfig) bool {
 	if cfg.ShowPaneLabels == nil {
