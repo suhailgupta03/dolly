@@ -75,16 +75,49 @@ dolly -e "npm run dev, npm test" -n my-session
 
 Runs each comma-separated command in its own pane. Prompts to save as YAML.
 
+### Attach mode — adopt existing tmux sessions
+
+Already have tmux sessions running? Bring them under dolly management:
+
+```bash
+dolly attach SESSION_NAME                # adopt one session
+dolly attach -all                        # adopt all unmanaged sessions
+dolly attach -list                       # discover unmanaged sessions
+```
+
+Attaching is idempotent — running it again on the same session warns and updates the entry without creating a duplicate.
+
+```
+$ dolly attach -list
+Unmanaged tmux sessions (not in dolly registry):
+NAME      WINDOWS  DIR
+work      3        /Users/x/work
+personal  1        /Users/x
+
+Run "dolly attach -all" to attach all, or "dolly attach NAME" for one.
+```
+
+### Terminate without a YAML file
+
+Any session — throwaway, attached, exec — can be terminated by name:
+
+```bash
+dolly -t my-project.yml    # terminate via YAML (reads session name from file)
+dolly -t SESSION_NAME      # terminate by session name directly
+```
+
 ### Session registry
 
 All dolly sessions are tracked in `~/.dolly/registry.json`. View them:
 
 ```bash
-dolly sessions                           # all sessions (yaml, exec, throwaway)
+dolly sessions                           # all sessions (yaml, exec, throwaway, attached)
 dolly sessions -type yaml                # filter by type
+dolly sessions -type attached            # show adopted sessions
+dolly sessions -format json              # output as JSON
 ```
 
-Registry is updated on every create, terminate, and cleanup. Sessions show as `alive` or `dead` based on live tmux status.
+Registry is updated on every create, terminate, attach, and cleanup. Sessions show as `alive` or `dead` based on live tmux status.
 
 ---
 

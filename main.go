@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
@@ -542,6 +543,7 @@ func handleAttachList() {
 func handleSessions(args []string) {
 	fs := flag.NewFlagSet("sessions", flag.ExitOnError)
 	typeStr := fs.String("type", "", "Filter by type: throwaway, yaml, exec, attached")
+	format := fs.String("format", "table", "Output format: table | json")
 
 	fs.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Usage: dolly sessions [flags]\n\n")
@@ -551,6 +553,7 @@ func handleSessions(args []string) {
 		fmt.Fprintf(os.Stderr, "  dolly sessions                    # all registered sessions\n")
 		fmt.Fprintf(os.Stderr, "  dolly sessions -type yaml         # only YAML sessions\n")
 		fmt.Fprintf(os.Stderr, "  dolly sessions -type attached     # only attached sessions\n")
+		fmt.Fprintf(os.Stderr, "  dolly sessions -format json       # output as JSON\n")
 	}
 
 	if err := fs.Parse(args); err != nil {
@@ -566,9 +569,19 @@ func handleSessions(args []string) {
 	if err != nil {
 		log.Fatalf("Error listing sessions: %v", err)
 	}
+
+	switch strings.ToLower(*format) {
+	case "json":
+		printSessionsJSON(sessions)
+	default:
+		printSessionsTable(sessions, *typeStr)
+	}
+}
+
+func printSessionsTable(sessions []registry.SessionStatus, typeFilter string) {
 	if len(sessions) == 0 {
-		if *typeStr != "" {
-			fmt.Printf("No %s sessions registered.\n", *typeStr)
+		if typeFilter != "" {
+			fmt.Printf("No %s sessions registered.\n", typeFilter)
 		} else {
 			fmt.Println("No sessions registered.")
 		}
@@ -593,6 +606,42 @@ func handleSessions(args []string) {
 		)
 	}
 	w.Flush()
+}
+
+func printSessionsJSON(sessions []registry.SessionStatus) {
+	// Build a plain serialisable slice so Alive is included in the output.
+	type jsonEntry struct {
+		Name       string `json:"name"`
+		Type       string `json:"type"`
+		Alive      bool   `json:"alive"`
+		Windows    int    `json:"windows"`
+		WorkingDir string `json:"working_dir"`
+		ConfigFile string `json:"config_file,omitempty"`
+		Terminal   string `json:"terminal"`
+		CreatedAt  string `json:"created_at"`
+		LastActive string `json:"last_active"`
+	}
+
+	out := make([]jsonEntry, 0, len(sessions))
+	for _, s := range sessions {
+		out = append(out, jsonEntry{
+			Name:       s.Name,
+			Type:       string(s.Type),
+			Alive:      s.Alive,
+			Windows:    s.Windows,
+			WorkingDir: s.WorkingDir,
+			ConfigFile: s.ConfigFile,
+			Terminal:   s.Terminal,
+			CreatedAt:  s.CreatedAt.Format(time.RFC3339),
+			LastActive: s.LastActive.Format(time.RFC3339),
+		})
+	}
+
+	enc := json.NewEncoder(os.Stdout)
+	enc.SetIndent("", "  ")
+	if err := enc.Encode(out); err != nil {
+		log.Fatalf("Error encoding JSON: %v", err)
+	}
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────
