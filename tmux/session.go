@@ -45,16 +45,17 @@ func enablePaneBordersForWindow(sessionName, windowName string, cfg *config.Tmux
 }
 
 // Default color palette for auto-coloring windows using user-friendly names
-var defaultColorPalette = [15]string{
-	"green",
-	"blue",
-	"red",
+var defaultColorPalette = [16]string{
+	"#8A9A5B", // Sage Green
+	"#1B3A5C", // Navy Blue
+	"#800020", // Deep Burgundy
 	"yellow",
-	"cyan",
+	"#00FFFF", // Cyan
 	"magenta",
 	"white",
-	"black",
-	"brightgreen",
+	"#B87333", // Copper
+	"#C0C0C0", // Silver
+	"#39FF14", // Neon Green
 	"brightblue",
 	"brightred",
 	"brightyellow",
