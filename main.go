@@ -32,6 +32,9 @@ func main() {
 		case "attach":
 			handleAttach(os.Args[2:])
 			return
+		case "sync":
+			handleSync(os.Args[2:])
+			return
 		}
 	}
 
@@ -57,6 +60,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "  throwaway [flags]        Create/manage disposable sessions\n")
 		fmt.Fprintf(os.Stderr, "  sessions  [flags]        List all registered dolly sessions\n")
 		fmt.Fprintf(os.Stderr, "  attach    [SESSION|-all|-list]   Adopt existing tmux sessions\n")
+		fmt.Fprintf(os.Stderr, "  sync      [flags]                Sync registry with live tmux sessions\n")
 		fmt.Fprintf(os.Stderr, "\nExamples:\n")
 		fmt.Fprintf(os.Stderr, "  %s my-project.yml                           # Create session from YAML\n", os.Args[0])
 		fmt.Fprintf(os.Stderr, "  %s -t my-project.yml                        # Terminate session\n", os.Args[0])
@@ -642,6 +646,136 @@ func printSessionsJSON(sessions []registry.SessionStatus) {
 	if err := enc.Encode(out); err != nil {
 		log.Fatalf("Error encoding JSON: %v", err)
 	}
+}
+
+// ── sync subcommand ───────────────────────────────────────────────────────────
+
+func handleSync(args []string) {
+	fs := flag.NewFlagSet("sync", flag.ExitOnError)
+	adopt  := fs.Bool("adopt",   false, "Also adopt running sessions not in registry")
+	dryRun := fs.Bool("dry-run", false, "Preview changes without writing")
+	format := fs.String("format", "table", "Output format: table | json")
+
+	fs.Usage = func() {
+		fmt.Fprintf(os.Stderr, "Usage: dolly sync [flags]\n\n")
+		fmt.Fprintf(os.Stderr, "Flags:\n")
+		fs.PrintDefaults()
+		fmt.Fprintf(os.Stderr, "\nExamples:\n")
+		fmt.Fprintf(os.Stderr, "  dolly sync               # prune dead registry entries\n")
+		fmt.Fprintf(os.Stderr, "  dolly sync -adopt        # prune dead + adopt unregistered sessions\n")
+		fmt.Fprintf(os.Stderr, "  dolly sync -dry-run      # preview changes\n")
+		fmt.Fprintf(os.Stderr, "  dolly sync -format json  # JSON output\n")
+	}
+
+	if err := fs.Parse(args); err != nil {
+		os.Exit(1)
+	}
+
+	// 1. Load registry once
+	reg, err := registry.Load()
+	if err != nil {
+		log.Fatalf("Error loading registry: %v", err)
+	}
+
+	// 2. Get all live tmux sessions
+	liveSessions, err := tmux.ListSessions()
+	if err != nil {
+		log.Fatalf("Error listing tmux sessions: %v", err)
+	}
+	liveSet := make(map[string]bool, len(liveSessions))
+	for _, s := range liveSessions {
+		liveSet[s] = true
+	}
+
+	// 3. Compute which registry entries are dead
+	managedSet := make(map[string]bool, len(reg.Sessions))
+	var kept []registry.Entry
+	var removed []string
+	for _, entry := range reg.Sessions {
+		managedSet[entry.Name] = true
+		if liveSet[entry.Name] {
+			kept = append(kept, entry)
+		} else {
+			removed = append(removed, entry.Name)
+		}
+	}
+
+	// 4. Compute which live sessions are unmanaged (only if -adopt)
+	var adopted []string
+	var newEntries []registry.Entry
+	if *adopt {
+		for _, name := range liveSessions {
+			if !managedSet[name] {
+				adopted = append(adopted, name)
+				windows, workingDir, _ := tmux.GetSessionDetails(name)
+				now := time.Now()
+				newEntries = append(newEntries, registry.Entry{
+					Name:       name,
+					Type:       registry.TypeAttached,
+					CreatedAt:  now,
+					LastActive: now,
+					WorkingDir: workingDir,
+					Windows:    windows,
+					Terminal:   tmux.DetectShell(),
+				})
+			}
+		}
+	}
+
+	// 5. Single write: build final slice and save once (no-op in dry-run)
+	if !*dryRun && (len(removed) > 0 || len(newEntries) > 0) {
+		final := append(kept, newEntries...)
+		reg.Sessions = final
+		if serr := registry.Save(reg); serr != nil {
+			log.Fatalf("Error saving registry: %v", serr)
+		}
+	}
+
+	// 6. Output
+	if strings.ToLower(*format) == "json" {
+		printSyncJSON(removed, adopted, *dryRun)
+	} else {
+		printSyncTable(removed, adopted, *dryRun)
+	}
+}
+
+func printSyncTable(removed, adopted []string, dryRun bool) {
+	if len(removed) == 0 && len(adopted) == 0 {
+		fmt.Println("Registry is already in sync with live tmux sessions.")
+		return
+	}
+	prefix := ""
+	if dryRun {
+		prefix = "[dry-run] "
+	}
+	for _, name := range removed {
+		fmt.Printf("%sWould remove: %s (dead)\n", prefix, name)
+	}
+	for _, name := range adopted {
+		fmt.Printf("%sWould adopt: %s (unmanaged)\n", prefix, name)
+	}
+	if dryRun {
+		fmt.Println("No changes made.")
+	} else {
+		fmt.Printf("Sync complete. Removed %d, adopted %d.\n", len(removed), len(adopted))
+	}
+}
+
+func printSyncJSON(removed, adopted []string, dryRun bool) {
+	if removed == nil {
+		removed = []string{}
+	}
+	if adopted == nil {
+		adopted = []string{}
+	}
+	out := struct {
+		DryRun  bool     `json:"dry_run"`
+		Removed []string `json:"removed"`
+		Adopted []string `json:"adopted"`
+	}{dryRun, removed, adopted}
+	enc := json.NewEncoder(os.Stdout)
+	enc.SetIndent("", "  ")
+	enc.Encode(out)
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────
