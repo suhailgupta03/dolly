@@ -47,6 +47,26 @@ func getPaneWorkingDir(pane config.Pane, fallbackDir string) string {
 	return fallbackDir
 }
 
+func injectShortcuts(sessionName, windowName string, paneIndex int, shortcutsFilePath string) error {
+	if shortcutsFilePath == "" {
+		return nil
+	}
+
+	target := fmt.Sprintf("%s:%s.%d", sessionName, windowName, paneIndex)
+
+	cmd := exec.Command("tmux", "send-keys", "-t", target, fmt.Sprintf("source %s", shortcutsFilePath), "Enter")
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to source shortcuts file in pane %d: %w", paneIndex, err)
+	}
+	time.Sleep(100 * time.Millisecond)
+
+	cmd = exec.Command("tmux", "send-keys", "-t", target, "clear", "Enter")
+	cmd.Run()
+	time.Sleep(50 * time.Millisecond)
+
+	return nil
+}
+
 func executePreHooks(sessionName, windowName string, paneIndex int, preHooks []string, terminal string) error {
 	for _, hook := range preHooks {
 		if hook == "" {
@@ -123,7 +143,10 @@ func SetupWindowPanes(sessionName, windowName string, panes []config.Pane, worki
 		firstPaneID = "pane1"
 	}
 
-	// Execute first pane commands
+	// Inject shortcuts, then execute first pane commands
+	if err := injectShortcuts(sessionName, windowName, 0, cfg.ShortcutsFilePath); err != nil {
+		return fmt.Errorf("failed to inject shortcuts for first pane: %w", err)
+	}
 	if err := executePreHooks(sessionName, windowName, 0, firstPane.PreHooks, cfg.Terminal); err != nil {
 		return fmt.Errorf("failed to execute pre-hooks for first pane: %w", err)
 	}
@@ -188,6 +211,9 @@ func SetupWindowPanes(sessionName, windowName string, panes []config.Pane, worki
 			return fmt.Errorf("failed to get index for new pane '%s': %w", paneID, err)
 		}
 
+		if err := injectShortcuts(sessionName, windowName, newPaneIndex, cfg.ShortcutsFilePath); err != nil {
+			return fmt.Errorf("failed to inject shortcuts for pane '%s': %w", paneID, err)
+		}
 		if err := executePreHooks(sessionName, windowName, newPaneIndex, pane.PreHooks, cfg.Terminal); err != nil {
 			return fmt.Errorf("failed to execute pre-hooks for pane '%s': %w", paneID, err)
 		}

@@ -4,12 +4,14 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"os/exec"
 	"strconv"
 	"strings"
 
 	"tmux-manager/config"
+	"tmux-manager/shortcuts"
 )
 
 // IsSessionAlive reports whether a tmux session with the given name is running.
@@ -162,6 +164,24 @@ func setWindowColor(sessionName, windowName, color string) error {
 }
 
 func CreateTmuxSession(cfg *config.TmuxConfig) error {
+	// Merge shortcut layers: defaults <- global <- per-session
+	globalSC, _ := shortcuts.LoadGlobal()
+	var defaults map[string]string
+	if cfg.DefaultShortcuts == nil || *cfg.DefaultShortcuts {
+		defaults = shortcuts.DefaultShortcuts
+	}
+	merged := shortcuts.Merge(defaults, globalSC, cfg.Shortcuts)
+	cfg.Shortcuts = merged
+
+	if len(cfg.Shortcuts) > 0 {
+		path, err := shortcuts.WriteShellFile(cfg.SessionName, cfg.Terminal, cfg.Shortcuts)
+		if err != nil {
+			log.Printf("Warning: could not write shortcuts file: %v", err)
+		} else {
+			cfg.ShortcutsFilePath = path
+		}
+	}
+
 	// Kill existing session if it exists
 	exec.Command("tmux", "kill-session", "-t", cfg.SessionName).Run()
 
@@ -310,5 +330,9 @@ func TerminateTmuxSession(sessionName string, rcFile string) error {
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("failed to terminate tmux session '%s': %w", sessionName, err)
 	}
+
+	// Clean up session-scoped shortcuts file
+	shortcuts.CleanupShellFile(sessionName)
+
 	return nil
 }

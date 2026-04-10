@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -14,6 +15,7 @@ import (
 	"tmux-manager/config"
 	"tmux-manager/prompt"
 	"tmux-manager/registry"
+	"tmux-manager/shortcuts"
 	"tmux-manager/throwaway"
 	"tmux-manager/tmux"
 )
@@ -34,6 +36,9 @@ func main() {
 			return
 		case "sync":
 			handleSync(os.Args[2:])
+			return
+		case "shortcuts":
+			handleShortcuts(os.Args[2:])
 			return
 		}
 	}
@@ -61,6 +66,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "  sessions  [flags]        List all registered dolly sessions\n")
 		fmt.Fprintf(os.Stderr, "  attach    [SESSION|-all|-list]   Adopt existing tmux sessions\n")
 		fmt.Fprintf(os.Stderr, "  sync      [flags]                Sync registry with live tmux sessions\n")
+		fmt.Fprintf(os.Stderr, "  shortcuts [add|remove|reset]     Manage pane command shortcuts\n")
 		fmt.Fprintf(os.Stderr, "\nExamples:\n")
 		fmt.Fprintf(os.Stderr, "  %s my-project.yml                           # Create session from YAML\n", os.Args[0])
 		fmt.Fprintf(os.Stderr, "  %s -t my-project.yml                        # Terminate session\n", os.Args[0])
@@ -776,6 +782,118 @@ func printSyncJSON(removed, adopted []string, dryRun bool) {
 	enc := json.NewEncoder(os.Stdout)
 	enc.SetIndent("", "  ")
 	enc.Encode(out)
+}
+
+// ── shortcuts subcommand ─────────────────────────────────────────────────────
+
+func handleShortcuts(args []string) {
+	if len(args) == 0 {
+		handleShortcutsList()
+		return
+	}
+
+	switch args[0] {
+	case "add":
+		if len(args) < 3 {
+			fmt.Fprintf(os.Stderr, "Usage: dolly shortcuts add NAME \"COMMAND\"\n")
+			os.Exit(1)
+		}
+		handleShortcutsAdd(args[1], args[2])
+	case "remove":
+		if len(args) < 2 {
+			fmt.Fprintf(os.Stderr, "Usage: dolly shortcuts remove NAME\n")
+			os.Exit(1)
+		}
+		handleShortcutsRemove(args[1])
+	case "reset":
+		handleShortcutsReset()
+	default:
+		fmt.Fprintf(os.Stderr, "Unknown shortcuts action: %s\n", args[0])
+		fmt.Fprintf(os.Stderr, "Usage: dolly shortcuts [add|remove|reset]\n")
+		os.Exit(1)
+	}
+}
+
+func handleShortcutsList() {
+	global, err := shortcuts.LoadGlobal()
+	if err != nil {
+		log.Fatalf("Error loading global shortcuts: %v", err)
+	}
+
+	// Build combined list with source and group tracking
+	type entry struct {
+		group, name, source, command string
+	}
+	var entries []entry
+
+	// Defaults first
+	for name, cmd := range shortcuts.DefaultShortcuts {
+		source := "default"
+		if gcmd, ok := global[name]; ok {
+			cmd = gcmd
+			source = "global"
+		}
+		entries = append(entries, entry{shortcuts.GroupOf(name), name, source, cmd})
+	}
+	// Global-only (not overriding a default)
+	for name, cmd := range global {
+		if _, isDefault := shortcuts.DefaultShortcuts[name]; !isDefault {
+			entries = append(entries, entry{"", name, "global", cmd})
+		}
+	}
+
+	if len(entries) == 0 {
+		fmt.Println("No shortcuts configured.")
+		return
+	}
+
+	// Sort by group then name; ungrouped (global-only) entries sort last
+	sort.Slice(entries, func(i, j int) bool {
+		gi, gj := entries[i].group, entries[j].group
+		if gi != gj {
+			// empty group sorts after named groups
+			if gi == "" {
+				return false
+			}
+			if gj == "" {
+				return true
+			}
+			return gi < gj
+		}
+		return entries[i].name < entries[j].name
+	})
+
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(w, "GROUP\tNAME\tSOURCE\tCOMMAND")
+	for _, e := range entries {
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", e.group, e.name, e.source, e.command)
+	}
+	w.Flush()
+}
+
+func handleShortcutsAdd(name, command string) {
+	warn, err := shortcuts.AddGlobal(name, command)
+	if err != nil {
+		log.Fatalf("Error: %v", err)
+	}
+	if warn != "" {
+		fmt.Fprintf(os.Stderr, "%s\n", warn)
+	}
+	fmt.Printf("Shortcut '%s' added to global shortcuts.\n", name)
+}
+
+func handleShortcutsRemove(name string) {
+	if err := shortcuts.RemoveGlobal(name); err != nil {
+		log.Fatalf("Error: %v", err)
+	}
+	fmt.Printf("Shortcut '%s' removed from global shortcuts.\n", name)
+}
+
+func handleShortcutsReset() {
+	if err := shortcuts.ResetGlobal(); err != nil {
+		log.Fatalf("Error: %v", err)
+	}
+	fmt.Println("Global shortcuts reset. Built-in defaults will still apply.")
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────

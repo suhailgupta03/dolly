@@ -97,6 +97,34 @@ personal  1        /Users/x
 Run "dolly attach -all" to attach all, or "dolly attach NAME" for one.
 ```
 
+### Pane shortcuts
+
+Every dolly pane gets built-in shortcuts organised by root command:
+
+
+```bash
+searchx foo
+ff foobar.mov
+```
+
+Add your own shortcuts:
+
+```bash
+dolly shortcuts                              # list all (with GROUP column)
+dolly shortcuts add deploy "./deploy.sh"     # add global shortcut
+dolly shortcuts remove deploy                # remove it
+```
+
+Per-session shortcuts can be defined in YAML via the `shortcuts:` key. Run `echo $DOLLY_SHORTCUTS_FILE` in any pane to see what's active.
+
+**Adding a shortcut mid-flight:** `dolly shortcuts add` writes to `~/.dolly/shortcuts.yml` only. Running sessions won't see it until they re-source the file:
+
+```bash
+source $DOLLY_SHORTCUTS_FILE
+```
+
+or until the session is restarted.
+
 ### Terminate without a YAML file
 
 Any session — throwaway, attached, exec — can be terminated by name:
@@ -117,7 +145,7 @@ dolly sessions -type attached            # show adopted sessions
 dolly sessions -format json              # output as JSON
 ```
 
-Registry is updated on every create, terminate, attach, and cleanup. Sessions show as `alive` or `dead` based on live tmux status.
+Registry is updated on every create, terminate, attach, and cleanup. Sessions show as `alive` or `dead` based on live tmux status. Shortcuts files are cleaned up automatically when sessions are terminated.
 
 ---
 
