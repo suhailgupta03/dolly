@@ -223,6 +223,8 @@ func CleanupShellFile(sessionName string) {
 
 // GroupOf returns the root-command group name for a built-in default shortcut
 // (e.g. "grep" for "search"), or "" if the name is not a built-in default.
+// Map existence checks are value-type agnostic, so no change needed here after
+// the ShortcutGroup.Shortcuts migration from map[string]string → map[string]ShortcutDef.
 func GroupOf(name string) string {
 	for group, g := range DefaultShortcutGroups {
 		if _, ok := g.Shortcuts[name]; ok {

@@ -66,7 +66,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "  sessions  [flags]        List all registered dolly sessions\n")
 		fmt.Fprintf(os.Stderr, "  attach    [SESSION|-all|-list]   Adopt existing tmux sessions\n")
 		fmt.Fprintf(os.Stderr, "  sync      [flags]                Sync registry with live tmux sessions\n")
-		fmt.Fprintf(os.Stderr, "  shortcuts [add|remove|reset]     Manage pane command shortcuts\n")
+		fmt.Fprintf(os.Stderr, "  shortcuts [add|remove|reset|sync] Manage pane command shortcuts\n")
 		fmt.Fprintf(os.Stderr, "\nExamples:\n")
 		fmt.Fprintf(os.Stderr, "  %s my-project.yml                           # Create session from YAML\n", os.Args[0])
 		fmt.Fprintf(os.Stderr, "  %s -t my-project.yml                        # Terminate session\n", os.Args[0])
@@ -807,9 +807,11 @@ func handleShortcuts(args []string) {
 		handleShortcutsRemove(args[1])
 	case "reset":
 		handleShortcutsReset()
+	case "sync":
+		handleShortcutsSync()
 	default:
 		fmt.Fprintf(os.Stderr, "Unknown shortcuts action: %s\n", args[0])
-		fmt.Fprintf(os.Stderr, "Usage: dolly shortcuts [add|remove|reset]\n")
+		fmt.Fprintf(os.Stderr, "Usage: dolly shortcuts [add|remove|reset|sync]\n")
 		os.Exit(1)
 	}
 }
@@ -894,6 +896,42 @@ func handleShortcutsReset() {
 		log.Fatalf("Error: %v", err)
 	}
 	fmt.Println("Global shortcuts reset. Built-in defaults will still apply.")
+}
+
+func handleShortcutsSync() {
+	reg, err := registry.Load()
+	if err != nil {
+		log.Fatalf("Error loading registry: %v", err)
+	}
+
+	global, err := shortcuts.LoadGlobal()
+	if err != nil {
+		log.Fatalf("Error loading global shortcuts: %v", err)
+	}
+
+	// Merge defaults + globals — same result for every session.
+	merged := shortcuts.Merge(shortcuts.DefaultShortcuts, global, nil)
+
+	synced := 0
+	for _, s := range reg.Sessions {
+		if !tmux.IsSessionAlive(s.Name) {
+			continue
+		}
+		path, err := shortcuts.WriteShellFile(s.Name, s.Terminal, merged)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "  error syncing '%s': %v\n", s.Name, err)
+			continue
+		}
+		fmt.Printf("  synced  %s  →  %s\n", s.Name, path)
+		synced++
+	}
+
+	if synced == 0 {
+		fmt.Println("No live sessions to sync.")
+		return
+	}
+	fmt.Printf("\n%d %s updated. Run this in each pane to apply:\n    source $DOLLY_SHORTCUTS_FILE\n",
+		synced, plural(synced, "session", "sessions"))
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────

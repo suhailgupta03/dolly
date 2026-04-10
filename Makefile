@@ -1,7 +1,7 @@
 # Dolly - Advanced Tmux Session Manager
 # A powerful YAML-based tmux session manager with terminal shell support and pre-hooks
 
-.PHONY: all build install clean test help deps lint vet fmt check run-sample run-distill dev-setup
+.PHONY: all build install clean test help deps lint vet fmt check run-sample run-distill dev-setup shortcuts check-shortcuts
 
 # Default target
 all: clean deps build test
@@ -80,7 +80,18 @@ fmt: ## Format Go code
 	go fmt ./...
 	@echo "$(GREEN)✅ Code formatted$(NC)"
 
-check: fmt vet lint ## Run all code quality checks
+shortcuts: ## Generate docs/shortcuts.md from built-in shortcut definitions
+	@echo "$(YELLOW)Generating shortcuts documentation...$(NC)"
+	@mkdir -p docs
+	go run ./cmd/gen-shortcuts/main.go
+	@echo "$(GREEN)✅ Generated docs/shortcuts.md$(NC)"
+
+check-shortcuts: shortcuts ## Verify docs/shortcuts.md is up-to-date (fails if stale)
+	@git diff --exit-code docs/shortcuts.md || \
+		(echo "$(RED)docs/shortcuts.md is stale — run: make shortcuts$(NC)" && exit 1)
+	@echo "$(GREEN)✅ docs/shortcuts.md is up-to-date$(NC)"
+
+check: fmt vet lint check-shortcuts ## Run all code quality checks
 	@echo "$(GREEN)✅ All checks passed$(NC)"
 
 run-sample: build ## Run with sample configuration

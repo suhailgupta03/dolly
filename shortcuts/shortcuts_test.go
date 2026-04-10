@@ -262,6 +262,22 @@ func TestCleanupShellFile(t *testing.T) {
 	}
 }
 
+func TestDefaultShortcutDefsComplete(t *testing.T) {
+	for group, g := range DefaultShortcutGroups {
+		for name, def := range g.Shortcuts {
+			if def.Command == "" {
+				t.Errorf("[%s/%s] Command is empty", group, name)
+			}
+			if def.Description == "" {
+				t.Errorf("[%s/%s] Description is empty", group, name)
+			}
+			if def.Example == "" {
+				t.Errorf("[%s/%s] Example is empty", group, name)
+			}
+		}
+	}
+}
+
 func TestResetGlobal(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
