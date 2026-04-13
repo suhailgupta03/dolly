@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"log"
 	"os"
 	"os/exec"
 	"strconv"
@@ -176,7 +175,7 @@ func CreateTmuxSession(cfg *config.TmuxConfig) error {
 	if len(cfg.Shortcuts) > 0 {
 		path, err := shortcuts.WriteShellFile(cfg.SessionName, cfg.Terminal, cfg.Shortcuts)
 		if err != nil {
-			log.Printf("Warning: could not write shortcuts file: %v", err)
+			fmt.Fprintf(os.Stderr, "Warning: could not write shortcuts file: %v\n", err)
 		} else {
 			cfg.ShortcutsFilePath = path
 		}

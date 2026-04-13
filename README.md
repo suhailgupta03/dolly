@@ -141,6 +141,23 @@ dolly sessions -format json              # output as JSON
 
 Registry is updated on every create, terminate, attach, and cleanup. Sessions show as `alive` or `dead` based on live tmux status. Shortcuts files are cleaned up automatically when sessions are terminated.
 
+### Crash reporting
+
+Dolly logs internal errors and panics to `~/.dolly/logs/crashes.jsonl` automatically. User input errors (nonexistent files, invalid flags) are not logged.
+
+```bash
+dolly report                       # show recent crashes (last 5)
+dolly report -last 10              # show last 10 entries (-last 0 for all)
+dolly report preview               # review issue body before submitting
+dolly report submit                # open pre-filled GitHub issue; confirm filing before marking
+dolly report url                   # print issue URL only (useful on headless/SSH)
+dolly report mark-submitted        # mark unsubmitted entries as reported after filing manually
+dolly report -format json          # JSON output with submitted status
+dolly report clear                 # clear crash log (prompts for confirmation)
+```
+
+Logs are stored with user-only permissions (`0600`). A `submitted.json` sidecar prevents duplicate issue reports.
+
 ---
 
 ## YAML Configuration Reference

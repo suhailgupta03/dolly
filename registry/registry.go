@@ -8,24 +8,18 @@ import (
 	"os/exec"
 	"path/filepath"
 	"time"
+
+	"tmux-manager/internal/dolly"
 )
 
-// registryPath returns the absolute path to ~/.dolly/registry.json
+// registryPath returns the absolute path to ~/.dolly/registry.json,
+// creating ~/.dolly/ if it does not exist.
 func registryPath() (string, error) {
-	home, err := os.UserHomeDir()
+	dir, err := dolly.DataDir()
 	if err != nil {
-		return "", fmt.Errorf("could not determine home directory: %w", err)
+		return "", fmt.Errorf("could not determine dolly data directory: %w", err)
 	}
-	return filepath.Join(home, ".dolly", "registry.json"), nil
-}
-
-// ensureDir creates ~/.dolly/ if it does not exist
-func ensureDir() error {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return err
-	}
-	return os.MkdirAll(filepath.Join(home, ".dolly"), 0755)
+	return filepath.Join(dir, "registry.json"), nil
 }
 
 // Load reads the registry from disk. Returns an empty Registry (not an error)
@@ -57,10 +51,6 @@ func Load() (*Registry, error) {
 // Save writes the registry to disk atomically via a temp file + rename to
 // prevent partial writes from corrupting the registry.
 func Save(reg *Registry) error {
-	if err := ensureDir(); err != nil {
-		return fmt.Errorf("could not create registry directory: %w", err)
-	}
-
 	path, err := registryPath()
 	if err != nil {
 		return err

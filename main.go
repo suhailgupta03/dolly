@@ -1,10 +1,10 @@
 package main
 
 import (
+	"bufio"
 	"encoding/json"
 	"flag"
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 	"sort"
@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"tmux-manager/config"
+	"tmux-manager/internal/crashlog"
 	"tmux-manager/prompt"
 	"tmux-manager/registry"
 	"tmux-manager/shortcuts"
@@ -20,9 +21,31 @@ import (
 	"tmux-manager/tmux"
 )
 
+// version is injected at build time via -ldflags "-X main.version=<tag>"
+var version = "dev"
+
 func main() {
-	// Subcommand detection must happen before flag.Parse() so the FlagSet
-	// for each subcommand can parse its own args independently.
+	// Determine the subcommand for panic recovery labelling.
+	// This must happen before flag.Parse() so the FlagSet for each subcommand
+	// can parse its own args independently.
+	subcmd := "main"
+	if len(os.Args) > 1 {
+		switch os.Args[1] {
+		case "throwaway", "sessions", "attach", "sync", "shortcuts", "report":
+			subcmd = os.Args[1]
+		default:
+			// Detect -exec/-e flag so panics in exec mode are labelled correctly
+			for _, a := range os.Args[1:] {
+				if a == "-exec" || a == "-e" ||
+					strings.HasPrefix(a, "-exec=") || strings.HasPrefix(a, "-e=") {
+					subcmd = "exec"
+					break
+				}
+			}
+		}
+	}
+	defer crashlog.HandlePanic(subcmd, version)
+
 	if len(os.Args) > 1 {
 		switch os.Args[1] {
 		case "throwaway":
@@ -39,6 +62,9 @@ func main() {
 			return
 		case "shortcuts":
 			handleShortcuts(os.Args[2:])
+			return
+		case "report":
+			handleReport(os.Args[2:])
 			return
 		}
 	}
@@ -67,6 +93,9 @@ func main() {
 		fmt.Fprintf(os.Stderr, "  attach    [SESSION|-all|-list]   Adopt existing tmux sessions\n")
 		fmt.Fprintf(os.Stderr, "  sync      [flags]                Sync registry with live tmux sessions\n")
 		fmt.Fprintf(os.Stderr, "  shortcuts [add|remove|reset|sync] Manage pane command shortcuts\n")
+		fmt.Fprintf(os.Stderr, "  report    [sub-action] [-last N] [-format table|json]\n")
+		fmt.Fprintf(os.Stderr, "            Sub-actions: submit, preview, url, mark-submitted, clear\n")
+		fmt.Fprintf(os.Stderr, "            View crash logs or open a pre-filled GitHub issue\n")
 		fmt.Fprintf(os.Stderr, "\nExamples:\n")
 		fmt.Fprintf(os.Stderr, "  %s my-project.yml                           # Create session from YAML\n", os.Args[0])
 		fmt.Fprintf(os.Stderr, "  %s -t my-project.yml                        # Terminate session\n", os.Args[0])
@@ -122,24 +151,24 @@ func main() {
 
 	cfg, err := config.LoadConfig(arg)
 	if err != nil {
-		log.Fatalf("Error loading config: %v", err)
+		crashlog.Exit(fmt.Errorf("error loading config: %v", err))
 	}
 
 	if *terminate || *terminateShort {
 		err = tmux.TerminateTmuxSession(cfg.SessionName, cfg.RcFile)
 		if err != nil {
-			log.Fatalf("Error terminating tmux session: %v", err)
+			crashlog.Fatal("main", version, fmt.Errorf("error terminating tmux session: %v", err))
 		}
 		fmt.Printf("Tmux session '%s' terminated successfully!\n", cfg.SessionName)
 		if rerr := registry.RemoveEntry(cfg.SessionName); rerr != nil {
-			log.Printf("Note: session '%s' was not in the registry", cfg.SessionName)
+			fmt.Fprintf(os.Stderr, "Note: session '%s' was not in the registry\n", cfg.SessionName)
 		}
 		return
 	}
 
 	err = tmux.CreateTmuxSession(cfg)
 	if err != nil {
-		log.Fatalf("Error creating tmux session: %v", err)
+		crashlog.Fatal("main", version, fmt.Errorf("error creating tmux session: %v", err))
 	}
 
 	fmt.Printf("Tmux session '%s' created successfully with terminal '%s'!\n", cfg.SessionName, cfg.Terminal)
@@ -155,7 +184,7 @@ func main() {
 		Windows:    len(cfg.Windows),
 		Terminal:   cfg.Terminal,
 	}); rerr != nil {
-		log.Printf("Warning: could not register session in registry: %v", rerr)
+		fmt.Fprintf(os.Stderr, "Warning: could not register session in registry: %v\n", rerr)
 	}
 }
 
@@ -168,14 +197,14 @@ func handleTerminateByName(name string) {
 		fmt.Printf("Tmux session '%s' terminated successfully!\n", name)
 	}
 	if rerr := registry.RemoveEntry(name); rerr != nil {
-		log.Printf("Note: session '%s' was not in the registry", name)
+		fmt.Fprintf(os.Stderr, "Note: session '%s' was not in the registry\n", name)
 	}
 }
 
 func handleExecMode(execStr, sessionName string, terminate bool) {
 	commands := config.ParseCommands(execStr)
 	if len(commands) == 0 {
-		log.Fatal("Error: no commands provided to -exec")
+		crashlog.Exit(fmt.Errorf("no commands provided to -exec"))
 	}
 
 	reader := prompt.NewReader()
@@ -184,30 +213,30 @@ func handleExecMode(execStr, sessionName string, terminate bool) {
 	if sessionName == "" {
 		sessionName, err = reader.GetSessionName("")
 		if err != nil {
-			log.Fatalf("Error: %v", err)
+			crashlog.Fatal("exec", version, err)
 		}
 	}
 
 	if terminate {
 		err = tmux.TerminateTmuxSession(sessionName, "")
 		if err != nil {
-			log.Fatalf("Error terminating tmux session: %v", err)
+			crashlog.Fatal("exec", version, fmt.Errorf("error terminating tmux session: %v", err))
 		}
 		fmt.Printf("Tmux session '%s' terminated successfully!\n", sessionName)
 		if rerr := registry.RemoveEntry(sessionName); rerr != nil {
-			log.Printf("Note: session '%s' was not in the registry", sessionName)
+			fmt.Fprintf(os.Stderr, "Note: session '%s' was not in the registry\n", sessionName)
 		}
 		return
 	}
 
 	cfg, err := config.BuildConfigFromCommands(sessionName, commands, "")
 	if err != nil {
-		log.Fatalf("Error building config: %v", err)
+		crashlog.Fatal("exec", version, fmt.Errorf("error building config: %v", err))
 	}
 
 	err = tmux.CreateTmuxSession(cfg)
 	if err != nil {
-		log.Fatalf("Error creating tmux session: %v", err)
+		crashlog.Fatal("exec", version, fmt.Errorf("error creating tmux session: %v", err))
 	}
 
 	fmt.Printf("Tmux session '%s' created successfully!\n", cfg.SessionName)
@@ -221,12 +250,12 @@ func handleExecMode(execStr, sessionName string, terminate bool) {
 		Windows:    len(cfg.Windows),
 		Terminal:   cfg.Terminal,
 	}); rerr != nil {
-		log.Printf("Warning: could not register session in registry: %v", rerr)
+		fmt.Fprintf(os.Stderr, "Warning: could not register session in registry: %v\n", rerr)
 	}
 
 	save, err := reader.ConfirmSaveConfig()
 	if err != nil {
-		log.Printf("Warning: %v", err)
+		fmt.Fprintf(os.Stderr, "Warning: %v\n", err)
 		return
 	}
 
@@ -234,13 +263,13 @@ func handleExecMode(execStr, sessionName string, terminate bool) {
 		defaultPath := fmt.Sprintf("%s.yml", sessionName)
 		configPath, err := reader.GetConfigFilePath(defaultPath)
 		if err != nil {
-			log.Printf("Warning: %v", err)
+			fmt.Fprintf(os.Stderr, "Warning: %v\n", err)
 			return
 		}
 
 		err = config.SaveConfig(cfg, configPath)
 		if err != nil {
-			log.Fatalf("Error saving config: %v", err)
+			crashlog.Fatal("exec", version, fmt.Errorf("error saving config: %v", err))
 		}
 
 		fmt.Printf("Configuration saved to '%s'\n", configPath)
@@ -294,7 +323,7 @@ func handleThrowaway(args []string) {
 func handleThrowawayCreate(name, dir string, windows, panes int) {
 	created, err := throwaway.Create(name, dir, windows, panes)
 	if err != nil {
-		log.Fatalf("Error: %v", err)
+		crashlog.Fatal("throwaway", version, err)
 	}
 	fmt.Printf("Throwaway session '%s' created (%d windows, %d panes each)\n", created, windows, panes)
 	fmt.Printf("Attach:  tmux attach -t %s\n", created)
@@ -304,7 +333,7 @@ func handleThrowawayCreate(name, dir string, windows, panes int) {
 func handleThrowawayList() {
 	sessions, err := registry.ListSessions(registry.TypeThrowaway)
 	if err != nil {
-		log.Fatalf("Error listing sessions: %v", err)
+		crashlog.Fatal("throwaway", version, fmt.Errorf("error listing sessions: %v", err))
 	}
 	if len(sessions) == 0 {
 		fmt.Println("No throwaway sessions registered.")
@@ -332,7 +361,7 @@ func handleThrowawayKill(name string) {
 		fmt.Fprintf(os.Stderr, "Warning: could not terminate tmux session '%s': %v\n", name, err)
 	}
 	if err := registry.RemoveEntry(name); err != nil {
-		log.Fatalf("Error removing '%s' from registry: %v", name, err)
+		crashlog.Fatal("throwaway", version, fmt.Errorf("error removing %q from registry: %v", name, err))
 	}
 	fmt.Printf("Session '%s' terminated and removed from registry.\n", name)
 }
@@ -340,7 +369,7 @@ func handleThrowawayKill(name string) {
 func handleThrowawayCleanup(days int) {
 	removed, err := registry.CleanupStale(days, registry.TypeThrowaway)
 	if err != nil {
-		log.Fatalf("Error during cleanup: %v", err)
+		crashlog.Fatal("throwaway", version, fmt.Errorf("error during cleanup: %v", err))
 	}
 	if len(removed) == 0 {
 		fmt.Printf("No stale throwaway sessions found (threshold: %d days).\n", days)
@@ -412,7 +441,7 @@ func handleAttachOne(name string) (alreadyRegistered bool, err error) {
 	// Query tmux for current session metadata
 	windows, workingDir, detailErr := tmux.GetSessionDetails(name)
 	if detailErr != nil {
-		log.Printf("Warning: could not read session details for '%s': %v", name, detailErr)
+		fmt.Fprintf(os.Stderr, "Warning: could not read session details for '%s': %v\n", name, detailErr)
 	}
 
 	now := time.Now()
@@ -444,7 +473,7 @@ func handleAttachDirect(name string) {
 
 	already, err := handleAttachOne(name)
 	if err != nil {
-		log.Fatalf("Error: %v", err)
+		crashlog.Exit(err)
 	}
 	if already {
 		fmt.Printf("Warning: session '%s' was already registered (type: %s). Updating with current info.\n",
@@ -467,7 +496,7 @@ func handleAttachDirect(name string) {
 func handleAttachAll() {
 	sessions, err := tmux.ListSessions()
 	if err != nil {
-		log.Fatalf("Error listing tmux sessions: %v", err)
+		crashlog.Fatal("attach", version, fmt.Errorf("error listing tmux sessions: %v", err))
 	}
 	if len(sessions) == 0 {
 		fmt.Println("No tmux sessions are currently running.")
@@ -505,7 +534,7 @@ func handleAttachAll() {
 func handleAttachList() {
 	sessions, err := tmux.ListSessions()
 	if err != nil {
-		log.Fatalf("Error listing tmux sessions: %v", err)
+		crashlog.Fatal("attach", version, fmt.Errorf("error listing tmux sessions: %v", err))
 	}
 	if len(sessions) == 0 {
 		fmt.Println("No tmux sessions running.")
@@ -514,7 +543,7 @@ func handleAttachList() {
 
 	reg, err := registry.Load()
 	if err != nil {
-		log.Fatalf("Error loading registry: %v", err)
+		crashlog.Fatal("attach", version, fmt.Errorf("error loading registry: %v", err))
 	}
 	managed := make(map[string]bool, len(reg.Sessions))
 	for _, s := range reg.Sessions {
@@ -577,7 +606,7 @@ func handleSessions(args []string) {
 
 	sessions, err := registry.ListSessions(filter...)
 	if err != nil {
-		log.Fatalf("Error listing sessions: %v", err)
+		crashlog.Fatal("sessions", version, fmt.Errorf("error listing sessions: %v", err))
 	}
 
 	switch strings.ToLower(*format) {
@@ -650,7 +679,7 @@ func printSessionsJSON(sessions []registry.SessionStatus) {
 	enc := json.NewEncoder(os.Stdout)
 	enc.SetIndent("", "  ")
 	if err := enc.Encode(out); err != nil {
-		log.Fatalf("Error encoding JSON: %v", err)
+		crashlog.Fatal("sessions", version, fmt.Errorf("error encoding JSON: %v", err))
 	}
 }
 
@@ -680,13 +709,13 @@ func handleSync(args []string) {
 	// 1. Load registry once
 	reg, err := registry.Load()
 	if err != nil {
-		log.Fatalf("Error loading registry: %v", err)
+		crashlog.Fatal("sync", version, fmt.Errorf("error loading registry: %v", err))
 	}
 
 	// 2. Get all live tmux sessions
 	liveSessions, err := tmux.ListSessions()
 	if err != nil {
-		log.Fatalf("Error listing tmux sessions: %v", err)
+		crashlog.Fatal("sync", version, fmt.Errorf("error listing tmux sessions: %v", err))
 	}
 	liveSet := make(map[string]bool, len(liveSessions))
 	for _, s := range liveSessions {
@@ -733,7 +762,7 @@ func handleSync(args []string) {
 		final := append(kept, newEntries...)
 		reg.Sessions = final
 		if serr := registry.Save(reg); serr != nil {
-			log.Fatalf("Error saving registry: %v", serr)
+			crashlog.Fatal("sync", version, fmt.Errorf("error saving registry: %v", serr))
 		}
 	}
 
@@ -819,7 +848,7 @@ func handleShortcuts(args []string) {
 func handleShortcutsList() {
 	global, err := shortcuts.LoadGlobal()
 	if err != nil {
-		log.Fatalf("Error loading global shortcuts: %v", err)
+		crashlog.Fatal("shortcuts", version, fmt.Errorf("error loading global shortcuts: %v", err))
 	}
 
 	// Build combined list with source and group tracking
@@ -874,26 +903,31 @@ func handleShortcutsList() {
 }
 
 func handleShortcutsAdd(name, command string) {
-	warn, err := shortcuts.AddGlobal(name, command)
+	// Pre-validate name — a bad name is a user error, not an internal failure
+	warn, err := shortcuts.ValidateName(name)
 	if err != nil {
-		log.Fatalf("Error: %v", err)
+		crashlog.Exit(err)
 	}
 	if warn != "" {
 		fmt.Fprintf(os.Stderr, "%s\n", warn)
+	}
+	// Validation passed; any error from AddGlobal is a file I/O failure
+	if _, err := shortcuts.AddGlobal(name, command); err != nil {
+		crashlog.Fatal("shortcuts", version, err)
 	}
 	fmt.Printf("Shortcut '%s' added to global shortcuts.\n", name)
 }
 
 func handleShortcutsRemove(name string) {
 	if err := shortcuts.RemoveGlobal(name); err != nil {
-		log.Fatalf("Error: %v", err)
+		crashlog.Fatal("shortcuts", version, err)
 	}
 	fmt.Printf("Shortcut '%s' removed from global shortcuts.\n", name)
 }
 
 func handleShortcutsReset() {
 	if err := shortcuts.ResetGlobal(); err != nil {
-		log.Fatalf("Error: %v", err)
+		crashlog.Fatal("shortcuts", version, err)
 	}
 	fmt.Println("Global shortcuts reset. Built-in defaults will still apply.")
 }
@@ -901,12 +935,12 @@ func handleShortcutsReset() {
 func handleShortcutsSync() {
 	reg, err := registry.Load()
 	if err != nil {
-		log.Fatalf("Error loading registry: %v", err)
+		crashlog.Fatal("shortcuts", version, fmt.Errorf("error loading registry: %v", err))
 	}
 
 	global, err := shortcuts.LoadGlobal()
 	if err != nil {
-		log.Fatalf("Error loading global shortcuts: %v", err)
+		crashlog.Fatal("shortcuts", version, fmt.Errorf("error loading global shortcuts: %v", err))
 	}
 
 	// Merge defaults + globals — same result for every session.
@@ -932,6 +966,186 @@ func handleShortcutsSync() {
 	}
 	fmt.Printf("\n%d %s updated. Run this in each pane to apply:\n    source $DOLLY_SHORTCUTS_FILE\n",
 		synced, plural(synced, "session", "sessions"))
+}
+
+// ── report subcommand ─────────────────────────────────────────────────────────
+
+func filterUnsubmitted(entries []crashlog.CrashEntry) []crashlog.CrashEntry {
+	var out []crashlog.CrashEntry
+	for _, e := range entries {
+		if !e.Submitted {
+			out = append(out, e)
+		}
+	}
+	return out
+}
+
+func handleReport(args []string) {
+	fs := flag.NewFlagSet("report", flag.ExitOnError)
+	last := fs.Int("last", 5, "Number of most-recent entries to show (0 = all)")
+	format := fs.String("format", "table", "Output format: table | json")
+
+	fs.Usage = func() {
+		fmt.Fprintf(os.Stderr, "Usage: dolly report [sub-action] [-last N] [-format table|json]\n\n")
+		fmt.Fprintf(os.Stderr, "Sub-actions:\n")
+		fmt.Fprintf(os.Stderr, "  submit          Open a pre-filled GitHub issue for unsubmitted crashes\n")
+		fmt.Fprintf(os.Stderr, "  preview         Print issue body to stdout\n")
+		fmt.Fprintf(os.Stderr, "  url             Print issue URL only (useful on headless/SSH)\n")
+		fmt.Fprintf(os.Stderr, "  mark-submitted  Mark unsubmitted entries as reported\n")
+		fmt.Fprintf(os.Stderr, "  clear           Clear crash log (prompts for confirmation)\n\n")
+		fmt.Fprintf(os.Stderr, "Flags:\n")
+		fs.PrintDefaults()
+	}
+
+	// Pull sub-action before flag parsing (positional, like "dolly shortcuts add")
+	subAction := ""
+	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
+		subAction = args[0]
+		args = args[1:]
+	}
+
+	if err := fs.Parse(args); err != nil {
+		os.Exit(1)
+	}
+
+	// handleReport never calls crashlog.Fatal/Exit — avoid recursive crash logging
+	fatalf := func(format string, a ...interface{}) {
+		fmt.Fprintf(os.Stderr, "Error: "+format+"\n", a...)
+		os.Exit(1)
+	}
+
+	entries, total, err := crashlog.ReadCrashes(*last)
+	if err != nil {
+		fatalf("could not read crash log: %v", err)
+	}
+
+	switch subAction {
+	case "":
+		// Default: show table or JSON of recent crashes
+		if len(entries) == 0 {
+			fmt.Println("No crash entries found.")
+			return
+		}
+		switch strings.ToLower(*format) {
+		case "json":
+			// Wrap entries to expose Submitted (json:"-" in CrashEntry)
+			type jsonEntry struct {
+				crashlog.CrashEntry
+				Submitted bool `json:"submitted"`
+			}
+			out := make([]jsonEntry, len(entries))
+			for i, e := range entries {
+				out[i] = jsonEntry{CrashEntry: e, Submitted: e.Submitted}
+			}
+			enc := json.NewEncoder(os.Stdout)
+			enc.SetIndent("", "  ")
+			if err := enc.Encode(out); err != nil {
+				fatalf("could not encode JSON: %v", err)
+			}
+		default:
+			fmt.Print(crashlog.FormatReport(entries, total))
+		}
+
+	case "preview":
+		if len(entries) == 0 {
+			fmt.Println("No crash entries found.")
+			return
+		}
+		fmt.Print(crashlog.FormatIssueBody(entries, version))
+
+	case "url":
+		if len(entries) == 0 {
+			fmt.Println("No crash entries found.")
+			return
+		}
+		unsubmitted := filterUnsubmitted(entries)
+		if len(unsubmitted) == 0 {
+			fmt.Println("No new crashes to report.")
+			return
+		}
+		fmt.Println(crashlog.GitHubIssueURL(unsubmitted, version))
+
+	case "submit":
+		unsubmitted := filterUnsubmitted(entries)
+		if len(unsubmitted) == 0 {
+			fmt.Println("No new crashes to report.")
+			return
+		}
+		fmt.Print(crashlog.FormatReport(unsubmitted, total))
+
+		reader := bufio.NewReader(os.Stdin)
+		fmt.Fprintf(os.Stderr, "Submit %d crash %s to GitHub? [y/N]: ",
+			len(unsubmitted), plural(len(unsubmitted), "entry", "entries"))
+		ans, _ := reader.ReadString('\n')
+		if strings.ToLower(strings.TrimSpace(ans)) != "y" {
+			fmt.Println("Aborted.")
+			return
+		}
+
+		issueURL := crashlog.GitHubIssueURL(unsubmitted, version)
+		fmt.Printf("URL: %s\n", issueURL)
+		crashlog.OpenBrowser(issueURL)
+
+		fmt.Fprintf(os.Stderr, "Issue filed? Mark these entries as reported? [y/N]: ")
+		ans2, _ := reader.ReadString('\n')
+		if strings.ToLower(strings.TrimSpace(ans2)) != "y" {
+			fmt.Println("Not marked. Run `dolly report mark-submitted` when the issue is filed.")
+			return
+		}
+
+		ids := make([]string, len(unsubmitted))
+		for i, e := range unsubmitted {
+			ids[i] = e.ID
+		}
+		if err := crashlog.MarkSubmitted(ids); err != nil {
+			fatalf("could not mark entries as submitted: %v", err)
+		}
+		fmt.Println("Marked as reported. Thank you!")
+
+	case "mark-submitted":
+		unsubmitted := filterUnsubmitted(entries)
+		if len(unsubmitted) == 0 {
+			fmt.Println("No entries to mark.")
+			return
+		}
+		fmt.Print(crashlog.FormatReport(unsubmitted, total))
+
+		reader := bufio.NewReader(os.Stdin)
+		fmt.Fprintf(os.Stderr, "Mark %d %s as reported? [y/N]: ",
+			len(unsubmitted), plural(len(unsubmitted), "entry", "entries"))
+		ans, _ := reader.ReadString('\n')
+		if strings.ToLower(strings.TrimSpace(ans)) != "y" {
+			fmt.Println("Aborted.")
+			return
+		}
+
+		ids := make([]string, len(unsubmitted))
+		for i, e := range unsubmitted {
+			ids[i] = e.ID
+		}
+		if err := crashlog.MarkSubmitted(ids); err != nil {
+			fatalf("could not mark entries as submitted: %v", err)
+		}
+		fmt.Println("Marked.")
+
+	case "clear":
+		reader := bufio.NewReader(os.Stdin)
+		fmt.Fprintf(os.Stderr, "Clear all crash logs? This cannot be undone. [y/N]: ")
+		ans, _ := reader.ReadString('\n')
+		if strings.ToLower(strings.TrimSpace(ans)) != "y" {
+			fmt.Println("Aborted.")
+			return
+		}
+		if err := crashlog.ClearCrashes(); err != nil {
+			fatalf("could not clear crash log: %v", err)
+		}
+		fmt.Println("Crash log cleared.")
+
+	default:
+		fmt.Fprintf(os.Stderr, "Unknown report sub-action: %q\n", subAction)
+		fs.Usage()
+		os.Exit(1)
+	}
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────

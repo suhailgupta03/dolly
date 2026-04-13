@@ -9,6 +9,8 @@ import (
 	"strings"
 
 	"gopkg.in/yaml.v3"
+
+	"tmux-manager/internal/dolly"
 )
 
 var validName = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
@@ -21,15 +23,7 @@ var shellBuiltins = map[string]bool{
 }
 
 func dollyDir() (string, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", fmt.Errorf("could not determine home directory: %w", err)
-	}
-	dir := filepath.Join(home, ".dolly")
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		return "", fmt.Errorf("could not create %s: %w", dir, err)
-	}
-	return dir, nil
+	return dolly.DataDir()
 }
 
 func globalFilePath() (string, error) {
